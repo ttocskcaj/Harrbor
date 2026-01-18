@@ -1,0 +1,42 @@
+# Build artifacts
+**/bin/
+**/obj/
+**/out/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Git
+.git/
+.gitignore
+
+# Docker
+**/Dockerfile*
+**/docker-compose*
+**/.dockerignore
+
+# Documentation
+*.md
+LICENSE
+
+# Local development
+**/appsettings.local.json
+**/appsettings.Development.json
+
+# Test projects
+tests/
+
+# Data and logs
+data/
+logs/
+staging/
+*.db
+*.db-shm
+*.db-wal
+
+# Claude
+.claude/

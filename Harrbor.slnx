@@ -1,0 +1,4 @@
+<Solution>
+    <Project Path="src/Harrbor/Harrbor.csproj" />
+    <Project Path="src/Harrbor.Tests/Harrbor.Tests.csproj" />
+</Solution>

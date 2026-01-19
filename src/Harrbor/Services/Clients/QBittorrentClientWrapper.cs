@@ -9,7 +9,8 @@ public class QBittorrentClientWrapper : IQBittorrentClient, IDisposable
     private readonly QBittorrentClient _client;
     private readonly QBittorrentOptions _options;
     private readonly ILogger<QBittorrentClientWrapper> _logger;
-    private bool _isLoggedIn;
+    private readonly SemaphoreSlim _loginSemaphore = new(1, 1);
+    private volatile bool _isLoggedIn;
 
     public QBittorrentClientWrapper(
         IOptions<QBittorrentOptions> options,
@@ -25,8 +26,13 @@ public class QBittorrentClientWrapper : IQBittorrentClient, IDisposable
         if (_isLoggedIn)
             return;
 
+        await _loginSemaphore.WaitAsync(cancellationToken);
         try
         {
+            // Double-check after acquiring lock
+            if (_isLoggedIn)
+                return;
+
             await _client.LoginAsync(_options.Username, _options.Password, cancellationToken);
             _isLoggedIn = true;
             _logger.LogDebug("Logged in to qBittorrent");
@@ -37,6 +43,19 @@ public class QBittorrentClientWrapper : IQBittorrentClient, IDisposable
                 "qBittorrent login failed: {StatusCode} - {Message}. BaseUrl: {BaseUrl}, Username: {Username}",
                 ex.StatusCode, ex.Message, _options.BaseUrl, _options.Username);
             throw;
+        }
+        finally
+        {
+            _loginSemaphore.Release();
+        }
+    }
+
+    private void InvalidateLoginOnAuthError(QBittorrentClientRequestException ex)
+    {
+        if (ex.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
+        {
+            _isLoggedIn = false;
+            _logger.LogDebug("qBittorrent session invalidated due to {StatusCode}", ex.StatusCode);
         }
     }
 
@@ -49,6 +68,7 @@ public class QBittorrentClientWrapper : IQBittorrentClient, IDisposable
         }
         catch (QBittorrentClientRequestException ex)
         {
+            InvalidateLoginOnAuthError(ex);
             _logger.LogError(
                 "qBittorrent GetTorrentList failed: {StatusCode} - {Message}",
                 ex.StatusCode, ex.Message);
@@ -93,6 +113,7 @@ public class QBittorrentClientWrapper : IQBittorrentClient, IDisposable
         }
         catch (QBittorrentClientRequestException ex)
         {
+            InvalidateLoginOnAuthError(ex);
             _logger.LogError(
                 "qBittorrent GetTorrentList failed: {StatusCode} - {Message}. Category: {Category}, Tags: {Tags}",
                 ex.StatusCode, ex.Message, category, tags != null ? string.Join(", ", tags) : "none");
@@ -110,6 +131,7 @@ public class QBittorrentClientWrapper : IQBittorrentClient, IDisposable
         }
         catch (QBittorrentClientRequestException ex)
         {
+            InvalidateLoginOnAuthError(ex);
             _logger.LogError(
                 "qBittorrent GetTorrent failed: {StatusCode} - {Message}. Hash: {Hash}",
                 ex.StatusCode, ex.Message, hash);
@@ -127,6 +149,7 @@ public class QBittorrentClientWrapper : IQBittorrentClient, IDisposable
         }
         catch (QBittorrentClientRequestException ex)
         {
+            InvalidateLoginOnAuthError(ex);
             _logger.LogError(
                 "qBittorrent DeleteTorrent failed: {StatusCode} - {Message}. Hash: {Hash}, DeleteFiles: {DeleteFiles}",
                 ex.StatusCode, ex.Message, hash, deleteFiles);
@@ -148,6 +171,7 @@ public class QBittorrentClientWrapper : IQBittorrentClient, IDisposable
                 ? " (409 Conflict typically means the category doesn't exist in qBittorrent)"
                 : "";
 
+            InvalidateLoginOnAuthError(ex);
             _logger.LogError(
                 "qBittorrent SetCategory failed: {StatusCode} - {Message}. Hash: {Hash}, Category: {Category}{Hint}",
                 ex.StatusCode, ex.Message, hash, category, hint);
@@ -165,6 +189,7 @@ public class QBittorrentClientWrapper : IQBittorrentClient, IDisposable
         }
         catch (QBittorrentClientRequestException ex)
         {
+            InvalidateLoginOnAuthError(ex);
             _logger.LogError(
                 "qBittorrent GetCategories failed: {StatusCode} - {Message}",
                 ex.StatusCode, ex.Message);
@@ -187,6 +212,7 @@ public class QBittorrentClientWrapper : IQBittorrentClient, IDisposable
         }
         catch (QBittorrentClientRequestException ex)
         {
+            InvalidateLoginOnAuthError(ex);
             _logger.LogError(
                 "qBittorrent EnsureCategoryExists failed: {StatusCode} - {Message}. Category: {Category}",
                 ex.StatusCode, ex.Message, category);
@@ -212,6 +238,7 @@ public class QBittorrentClientWrapper : IQBittorrentClient, IDisposable
         }
         catch (QBittorrentClientRequestException ex)
         {
+            InvalidateLoginOnAuthError(ex);
             return new ConnectionTestResult(false, Error: $"API error ({ex.StatusCode}) at {_options.BaseUrl}: {ex.Message}");
         }
         catch (HttpRequestException ex)
@@ -229,5 +256,6 @@ public class QBittorrentClientWrapper : IQBittorrentClient, IDisposable
     public void Dispose()
     {
         _client.Dispose();
+        _loginSemaphore.Dispose();
     }
 }

@@ -124,13 +124,23 @@ public class OrchestrationWorker : BackgroundService
             if (existingRelease != null)
                 continue;
 
+            // Determine the remote path (from queue item or job default)
+            var remotePath = queueItem.OutputPath ?? job.RemotePath;
+            if (string.IsNullOrEmpty(remotePath))
+            {
+                _logger.LogWarning(
+                    "Job '{JobName}': Skipping release '{ReleaseName}' - no remote path available (OutputPath and job RemotePath are both empty)",
+                    job.Name, queueItem.Title);
+                continue;
+            }
+
             // Create new tracked release
             var release = new TrackedRelease
             {
                 DownloadId = queueItem.DownloadId,
                 Name = queueItem.Title,
                 JobName = job.Name,
-                RemotePath = queueItem.OutputPath ?? job.RemotePath,
+                RemotePath = remotePath,
                 StagingPath = job.StagingPath,
                 DownloadStatus = DownloadStatus.Pending,
                 TransferStatus = TransferStatus.Pending,

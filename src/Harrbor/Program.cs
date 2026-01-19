@@ -71,10 +71,10 @@ try
 
     // Health Checks
     builder.Services.AddHealthChecks()
-        .AddDbContextCheck<HarrborDbContext>("database")
-        .AddCheck<QBittorrentHealthCheck>("qbittorrent")
-        .AddCheck<SonarrHealthCheck>("sonarr")
-        .AddCheck<RadarrHealthCheck>("radarr");
+        .AddDbContextCheck<HarrborDbContext>("database", tags: ["ready"])
+        .AddCheck<QBittorrentHealthCheck>("qbittorrent", tags: ["ready"])
+        .AddCheck<SonarrHealthCheck>("sonarr", tags: ["ready"])
+        .AddCheck<RadarrHealthCheck>("radarr", tags: ["ready"]);
 
     var app = builder.Build();
 
@@ -98,7 +98,7 @@ try
     app.MapHealthChecks("/health");
     app.MapHealthChecks("/health/ready", new()
     {
-        Predicate = check => check.Tags.Contains("ready") || check.Name == "database"
+        Predicate = check => check.Tags.Contains("ready")
     });
     app.MapHealthChecks("/health/live", new()
     {

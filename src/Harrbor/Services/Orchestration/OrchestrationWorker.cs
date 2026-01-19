@@ -115,7 +115,16 @@ public class OrchestrationWorker : BackgroundService
 
         _logger.LogDebug("Job '{JobName}': Media service queue has {Count} items", job.Name, queue.Count);
 
-        foreach (var queueItem in queue)
+        // Deduplicate by DownloadId to handle season packs (multiple episodes share one torrent)
+        var uniqueQueue = queue.DistinctBy(q => q.DownloadId).ToList();
+        if (uniqueQueue.Count < queue.Count)
+        {
+            _logger.LogDebug(
+                "Job '{JobName}': Deduplicated queue from {Original} to {Unique} items (season pack detected)",
+                job.Name, queue.Count, uniqueQueue.Count);
+        }
+
+        foreach (var queueItem in uniqueQueue)
         {
             // Check if we're already tracking this release
             var existingRelease = await dbContext.TrackedReleases

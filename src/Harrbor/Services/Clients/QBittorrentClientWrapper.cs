@@ -25,43 +25,204 @@ public class QBittorrentClientWrapper : IQBittorrentClient, IDisposable
         if (_isLoggedIn)
             return;
 
-        await _client.LoginAsync(_options.Username, _options.Password, cancellationToken);
-        _isLoggedIn = true;
-        _logger.LogDebug("Logged in to qBittorrent");
+        try
+        {
+            await _client.LoginAsync(_options.Username, _options.Password, cancellationToken);
+            _isLoggedIn = true;
+            _logger.LogDebug("Logged in to qBittorrent");
+        }
+        catch (QBittorrentClientRequestException ex)
+        {
+            _logger.LogError(
+                "qBittorrent login failed: {StatusCode} - {Message}. BaseUrl: {BaseUrl}, Username: {Username}",
+                ex.StatusCode, ex.Message, _options.BaseUrl, _options.Username);
+            throw;
+        }
     }
 
     public async Task<IReadOnlyList<TorrentInfo>> GetTorrentListAsync(CancellationToken cancellationToken = default)
     {
-        await EnsureLoggedInAsync(cancellationToken);
-        return await _client.GetTorrentListAsync(new TorrentListQuery(), cancellationToken);
+        try
+        {
+            await EnsureLoggedInAsync(cancellationToken);
+            return await _client.GetTorrentListAsync(new TorrentListQuery(), cancellationToken);
+        }
+        catch (QBittorrentClientRequestException ex)
+        {
+            _logger.LogError(
+                "qBittorrent GetTorrentList failed: {StatusCode} - {Message}",
+                ex.StatusCode, ex.Message);
+            throw;
+        }
     }
 
-    public async Task<TorrentInfo?> GetTorrentAsync(string hash, CancellationToken cancellationToken = default)
-    {
-        await EnsureLoggedInAsync(cancellationToken);
-        var torrents = await _client.GetTorrentListAsync(new TorrentListQuery { Hashes = [hash] }, cancellationToken);
-        return torrents.FirstOrDefault();
-    }
-
-    public async Task DeleteTorrentAsync(string hash, bool deleteFiles = false, CancellationToken cancellationToken = default)
-    {
-        await EnsureLoggedInAsync(cancellationToken);
-        await _client.DeleteAsync(hash, deleteFiles, cancellationToken);
-        _logger.LogInformation("Deleted torrent {Hash} (deleteFiles: {DeleteFiles})", hash, deleteFiles);
-    }
-
-    public async Task<bool> IsConnectedAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<TorrentInfo>> GetTorrentListAsync(
+        string? category,
+        IReadOnlyList<string>? tags,
+        CancellationToken cancellationToken = default)
     {
         try
         {
             await EnsureLoggedInAsync(cancellationToken);
-            await _client.GetApiVersionAsync(cancellationToken);
-            return true;
+
+            var query = new TorrentListQuery();
+
+            // Filter by category if specified
+            if (!string.IsNullOrEmpty(category))
+            {
+                query.Category = category;
+            }
+
+            // qBittorrent API supports single tag filter natively
+            if (tags is { Count: 1 })
+            {
+                query.Tag = tags[0];
+            }
+
+            var torrents = await _client.GetTorrentListAsync(query, cancellationToken);
+
+            // Multi-tag filtering must be done client-side
+            if (tags is { Count: > 1 })
+            {
+                torrents = torrents
+                    .Where(t => t.Tags != null && tags.All(tag => t.Tags.Contains(tag)))
+                    .ToList();
+            }
+
+            return torrents;
+        }
+        catch (QBittorrentClientRequestException ex)
+        {
+            _logger.LogError(
+                "qBittorrent GetTorrentList failed: {StatusCode} - {Message}. Category: {Category}, Tags: {Tags}",
+                ex.StatusCode, ex.Message, category, tags != null ? string.Join(", ", tags) : "none");
+            throw;
+        }
+    }
+
+    public async Task<TorrentInfo?> GetTorrentAsync(string hash, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await EnsureLoggedInAsync(cancellationToken);
+            var torrents = await _client.GetTorrentListAsync(new TorrentListQuery { Hashes = [hash] }, cancellationToken);
+            return torrents.FirstOrDefault();
+        }
+        catch (QBittorrentClientRequestException ex)
+        {
+            _logger.LogError(
+                "qBittorrent GetTorrent failed: {StatusCode} - {Message}. Hash: {Hash}",
+                ex.StatusCode, ex.Message, hash);
+            throw;
+        }
+    }
+
+    public async Task DeleteTorrentAsync(string hash, bool deleteFiles = false, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await EnsureLoggedInAsync(cancellationToken);
+            await _client.DeleteAsync(hash, deleteFiles, cancellationToken);
+            _logger.LogInformation("Deleted torrent {Hash} (deleteFiles: {DeleteFiles})", hash, deleteFiles);
+        }
+        catch (QBittorrentClientRequestException ex)
+        {
+            _logger.LogError(
+                "qBittorrent DeleteTorrent failed: {StatusCode} - {Message}. Hash: {Hash}, DeleteFiles: {DeleteFiles}",
+                ex.StatusCode, ex.Message, hash, deleteFiles);
+            throw;
+        }
+    }
+
+    public async Task SetCategoryAsync(string hash, string category, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await EnsureLoggedInAsync(cancellationToken);
+            await _client.SetTorrentCategoryAsync(hash, category, cancellationToken);
+            _logger.LogInformation("Set category for torrent {Hash} to {Category}", hash, category);
+        }
+        catch (QBittorrentClientRequestException ex)
+        {
+            var hint = ex.StatusCode == System.Net.HttpStatusCode.Conflict
+                ? " (409 Conflict typically means the category doesn't exist in qBittorrent)"
+                : "";
+
+            _logger.LogError(
+                "qBittorrent SetCategory failed: {StatusCode} - {Message}. Hash: {Hash}, Category: {Category}{Hint}",
+                ex.StatusCode, ex.Message, hash, category, hint);
+            throw;
+        }
+    }
+
+    public async Task<IReadOnlyList<string>> GetCategoriesAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await EnsureLoggedInAsync(cancellationToken);
+            var categories = await _client.GetCategoriesAsync(cancellationToken);
+            return categories.Keys.ToList();
+        }
+        catch (QBittorrentClientRequestException ex)
+        {
+            _logger.LogError(
+                "qBittorrent GetCategories failed: {StatusCode} - {Message}",
+                ex.StatusCode, ex.Message);
+            throw;
+        }
+    }
+
+    public async Task EnsureCategoryExistsAsync(string category, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await EnsureLoggedInAsync(cancellationToken);
+            var categories = await _client.GetCategoriesAsync(cancellationToken);
+
+            if (!categories.ContainsKey(category))
+            {
+                _logger.LogInformation("Creating qBittorrent category: {Category}", category);
+                await _client.AddCategoryAsync(category, cancellationToken);
+            }
+        }
+        catch (QBittorrentClientRequestException ex)
+        {
+            _logger.LogError(
+                "qBittorrent EnsureCategoryExists failed: {StatusCode} - {Message}. Category: {Category}",
+                ex.StatusCode, ex.Message, category);
+            throw;
+        }
+    }
+
+    public async Task<bool> IsConnectedAsync(CancellationToken cancellationToken = default)
+    {
+        var result = await TestConnectionAsync(cancellationToken);
+        return result.Success;
+    }
+
+    public async Task<ConnectionTestResult> TestConnectionAsync(CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Testing connection to qBittorrent at {BaseUrl}", _options.BaseUrl);
+
+        try
+        {
+            await EnsureLoggedInAsync(cancellationToken);
+            var version = await _client.GetApiVersionAsync(cancellationToken);
+            return new ConnectionTestResult(true, Version: version.ToString());
+        }
+        catch (QBittorrentClientRequestException ex)
+        {
+            return new ConnectionTestResult(false, Error: $"API error ({ex.StatusCode}) at {_options.BaseUrl}: {ex.Message}");
+        }
+        catch (HttpRequestException ex)
+        {
+            var error = ex.InnerException?.Message ?? ex.Message;
+            return new ConnectionTestResult(false, Error: $"Cannot reach {_options.BaseUrl}: {error}");
         }
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "qBittorrent connectivity check failed");
-            return false;
+            return new ConnectionTestResult(false, Error: $"Error connecting to {_options.BaseUrl}: {ex.Message}");
         }
     }
 

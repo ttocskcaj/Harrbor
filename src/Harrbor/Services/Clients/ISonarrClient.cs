@@ -1,7 +1,5 @@
 namespace Harrbor.Services.Clients;
 
-public interface ISonarrClient
+public interface ISonarrClient : IMediaService
 {
-    Task<bool> IsHealthyAsync(CancellationToken cancellationToken = default);
-    Task TriggerManualImportAsync(string path, CancellationToken cancellationToken = default);
 }

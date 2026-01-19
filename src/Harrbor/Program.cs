@@ -3,9 +3,10 @@ using Serilog;
 using Harrbor.Configuration;
 using Harrbor.Data;
 using Harrbor.HealthChecks;
+using Harrbor.Services;
 using Harrbor.Services.Clients;
 using Harrbor.Services.Orchestration;
-using Harrbor.Services.Transfer;
+using Harrbor.Services.RemoteStorage;
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
@@ -16,6 +17,10 @@ try
     Log.Information("Starting Harrbor");
 
     var builder = WebApplication.CreateBuilder(args);
+
+    builder.Configuration
+        .AddJsonFile("appsettings.json")
+        .AddJsonFile("appsettings.local.json", optional: true, reloadOnChange: true);
 
     builder.Host.UseSerilog((context, services, configuration) => configuration
         .ReadFrom.Configuration(context.Configuration)
@@ -31,13 +36,17 @@ try
         builder.Configuration.GetSection(SonarrOptions.SectionName));
     builder.Services.Configure<RadarrOptions>(
         builder.Configuration.GetSection(RadarrOptions.SectionName));
+    builder.Services.Configure<RemoteStorageOptions>(
+        builder.Configuration.GetSection(RemoteStorageOptions.SectionName));
+    builder.Services.Configure<JobOptions>(
+        builder.Configuration.GetSection(JobOptions.SectionName));
 
     // Database
     var harrborOptions = builder.Configuration
         .GetSection(HarrborOptions.SectionName)
         .Get<HarrborOptions>() ?? new HarrborOptions();
 
-    var dbPath = Path.Combine(harrborOptions.DataPath, "harrbor.db");
+    var dbPath = Path.Combine(harrborOptions.DataPath, "harrbor.sqlite");
     Directory.CreateDirectory(harrborOptions.DataPath);
 
     builder.Services.AddDbContext<HarrborDbContext>(options =>
@@ -45,13 +54,17 @@ try
 
     // Services
     builder.Services.AddSingleton<IQBittorrentClient, QBittorrentClientWrapper>();
-    builder.Services.AddScoped<ITransferService, RcloneTransferService>();
+    builder.Services.AddScoped<IRemoteStorageService, RcloneRemoteStorageService>();
+    builder.Services.AddScoped<IMediaServiceResolver, MediaServiceResolver>();
 
     builder.Services.AddHttpClient<ISonarrClient, SonarrClient>()
         .AddStandardResilienceHandler();
 
     builder.Services.AddHttpClient<IRadarrClient, RadarrClient>()
         .AddStandardResilienceHandler();
+
+    // Startup validation
+    builder.Services.AddTransient<StartupValidator>();
 
     // Background Worker
     builder.Services.AddHostedService<OrchestrationWorker>();
@@ -69,7 +82,14 @@ try
     using (var scope = app.Services.CreateScope())
     {
         var db = scope.ServiceProvider.GetRequiredService<HarrborDbContext>();
-        db.Database.EnsureCreated();
+        db.Database.Migrate();
+    }
+
+    // Validate external service connections
+    using (var scope = app.Services.CreateScope())
+    {
+        var validator = scope.ServiceProvider.GetRequiredService<StartupValidator>();
+        await validator.ValidateAsync();
     }
 
     app.UseSerilogRequestLogging();

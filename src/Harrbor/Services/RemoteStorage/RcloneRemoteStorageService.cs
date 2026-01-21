@@ -18,6 +18,7 @@ public partial class RcloneRemoteStorageService : IRemoteStorageService
         _options = options.Value;
         _logger = logger;
         _remotePrefix = BuildRemotePrefix();
+        _logger.LogDebug("Rclone remote prefix: {RemotePrefix}", RedactSensitiveArgs(_remotePrefix));
     }
 
     private string BuildRemotePrefix()

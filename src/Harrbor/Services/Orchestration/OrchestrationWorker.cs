@@ -102,6 +102,22 @@ public class OrchestrationWorker : BackgroundService
         // 6. PROCESS PENDING ARCHIVAL - Change torrent category
         await ProcessPendingArchivalAsync(job, dbContext, qBittorrentClient, cancellationToken);
 
+        // Log summary of tracked releases for this job
+        var summary = await dbContext.TrackedReleases
+            .Where(r => r.JobName == job.Name)
+            .GroupBy(r => new { r.DownloadStatus, r.TransferStatus, r.ImportStatus })
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+
+        if (summary.Any())
+        {
+            _logger.LogDebug(
+                "Job '{JobName}': Tracked releases summary: {Summary}",
+                job.Name,
+                string.Join(", ", summary.Select(s =>
+                    $"[D:{s.Key.DownloadStatus}/T:{s.Key.TransferStatus}/I:{s.Key.ImportStatus}]={s.Count}")));
+        }
+
         _logger.LogDebug("Job '{JobName}': Reconciliation cycle completed", job.Name);
     }
 
@@ -131,7 +147,13 @@ public class OrchestrationWorker : BackgroundService
                 .FirstOrDefaultAsync(r => r.DownloadId == queueItem.DownloadId, cancellationToken);
 
             if (existingRelease != null)
+            {
+                _logger.LogDebug(
+                    "Job '{JobName}': Release '{ReleaseName}' already tracked by job '{TrackedJob}' (Download: {DownloadStatus}, Transfer: {TransferStatus}, Import: {ImportStatus})",
+                    job.Name, existingRelease.Name, existingRelease.JobName,
+                    existingRelease.DownloadStatus, existingRelease.TransferStatus, existingRelease.ImportStatus);
                 continue;
+            }
 
             // Determine the remote path (from queue item or job default)
             var remotePath = queueItem.OutputPath ?? job.RemotePath;

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Serilog;
 using Harrbor.Configuration;
 using Harrbor.Data;
+using Harrbor.Data.Entities;
 using Harrbor.HealthChecks;
 using Harrbor.Services;
 using Harrbor.Services.Clients;
@@ -85,6 +86,26 @@ try
     {
         var db = scope.ServiceProvider.GetRequiredService<HarrborDbContext>();
         db.Database.Migrate();
+
+        // Reset any stuck InProgress transfers (from interrupted runs)
+        var stuckTransfers = await db.TrackedReleases
+            .Where(r => r.TransferStatus == TransferStatus.InProgress)
+            .ToListAsync();
+
+        if (stuckTransfers.Count > 0)
+        {
+            foreach (var release in stuckTransfers)
+            {
+                release.TransferStatus = TransferStatus.Pending;
+                release.TransferStartedAtUtc = null;
+            }
+            await db.SaveChangesAsync();
+
+            var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+            logger.LogInformation(
+                "Reset {Count} stuck transfers to Pending state",
+                stuckTransfers.Count);
+        }
     }
 
     // Validate external service connections

@@ -8,6 +8,7 @@ using Harrbor.Services;
 using Harrbor.Services.Clients;
 using Harrbor.Services.Orchestration;
 using Harrbor.Services.RemoteStorage;
+using Harrbor.Services.Orchestration.Phases;
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
@@ -68,6 +69,14 @@ try
 
     // Startup validation
     builder.Services.AddTransient<StartupValidator>();
+
+    // Phase Handlers
+    builder.Services.AddScoped<IDiscoveryPhaseHandler, DiscoveryPhaseHandler>();
+    builder.Services.AddScoped<IDownloadPhaseHandler, DownloadPhaseHandler>();
+    builder.Services.AddScoped<ITransferPhaseHandler, TransferPhaseHandler>();
+    builder.Services.AddScoped<IImportPhaseHandler, ImportPhaseHandler>();
+    builder.Services.AddScoped<ICleanupPhaseHandler, CleanupPhaseHandler>();
+    builder.Services.AddScoped<IArchivalPhaseHandler, ArchivalPhaseHandler>();
 
     // Background Worker
     builder.Services.AddHostedService<OrchestrationWorker>();

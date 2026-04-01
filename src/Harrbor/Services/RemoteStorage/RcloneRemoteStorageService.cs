@@ -263,7 +263,7 @@ public partial class RcloneRemoteStorageService : IRemoteStorageService
         return process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output);
     }
 
-    private static long ParseBytesTransferred(List<string> lines)
+    internal static long ParseBytesTransferred(List<string> lines)
     {
         // Look for lines like "Transferred: 1.234 GiB / 1.234 GiB, 100%, 50.000 MiB/s"
         foreach (var line in lines.AsEnumerable().Reverse())
@@ -289,7 +289,7 @@ public partial class RcloneRemoteStorageService : IRemoteStorageService
         return 0;
     }
 
-    private static string RedactSensitiveArgs(string args)
+    internal static string RedactSensitiveArgs(string args)
     {
         // Redact pass= and key_file_pass= values from rclone connection strings
         return SensitiveArgRegex().Replace(args, "$1[REDACTED]");

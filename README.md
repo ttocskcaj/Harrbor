@@ -19,13 +19,14 @@ services:
       - PGID=1000
       - TZ=Pacific/Auckland
     volumes:
-      - ./config/appsettings.json:/app/appsettings.json:ro
       - ./ssh/id_ed25519:/home/harrbor/.ssh/id_ed25519:ro
       - ./data:/app/data
       - ./staging:/staging
     ports:
       - "8080:8080"
 ```
+
+Connections (qBittorrent, Sonarr, Radarr, SFTP) and jobs are configured through the web UI / REST API after first start — no config file editing required. Configuration is stored in the SQLite database under `/app/data`.
 
 ## Documentation
 

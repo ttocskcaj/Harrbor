@@ -31,4 +31,9 @@ public interface IMediaService
     /// Checks if the service is healthy and reachable.
     /// </summary>
     Task<bool> IsHealthyAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Tests connectivity using an explicit (possibly not-yet-saved) base URL and API key.
+    /// </summary>
+    Task<ConnectionTestResult> TestConnectionAsync(string baseUrl, string apiKey, CancellationToken cancellationToken = default);
 }

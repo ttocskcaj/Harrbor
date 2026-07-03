@@ -1,26 +1,33 @@
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-using Microsoft.Extensions.Options;
-using Harrbor.Configuration;
+using Harrbor.Configuration.Connections;
 using Harrbor.Services.Clients;
+using Harrbor.Services.Configuration;
 
 namespace Harrbor.HealthChecks;
 
 public class RadarrHealthCheck : IHealthCheck
 {
     private readonly IRadarrClient _client;
-    private readonly RadarrOptions _options;
+    private readonly IConnectionStore _connectionStore;
 
-    public RadarrHealthCheck(IRadarrClient client, IOptions<RadarrOptions> options)
+    public RadarrHealthCheck(IRadarrClient client, IConnectionStore connectionStore)
     {
         _client = client;
-        _options = options.Value;
+        _connectionStore = connectionStore;
     }
 
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
-        if (!_options.Enabled)
+        var stamped = await _connectionStore.GetAsync<RadarrSettings>(cancellationToken);
+
+        if (stamped is null)
+        {
+            return HealthCheckResult.Degraded("Radarr is not configured");
+        }
+
+        if (!stamped.Settings.Enabled)
         {
             return HealthCheckResult.Healthy("Radarr integration is disabled");
         }

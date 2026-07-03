@@ -1,8 +1,8 @@
-namespace Harrbor.Configuration;
+namespace Harrbor.Configuration.Connections;
 
-public class RemoteStorageOptions
+public class RemoteStorageSettings : IConnectionSettings
 {
-    public const string SectionName = "RemoteStorage";
+    public static string ConnectionType => ConnectionTypes.RemoteStorage;
 
     public string Host { get; set; } = string.Empty;
     public int Port { get; set; } = 22;

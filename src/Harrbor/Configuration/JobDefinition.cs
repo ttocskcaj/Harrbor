@@ -1,12 +1,9 @@
 namespace Harrbor.Configuration;
 
-public class JobOptions
-{
-    public const string SectionName = "Jobs";
-
-    public List<JobDefinition> Definitions { get; set; } = [];
-}
-
+/// <summary>
+/// Immutable snapshot of a job's settings, passed through one pipeline cycle.
+/// Mapped from the Job entity at cycle start so mid-cycle edits apply next cycle.
+/// </summary>
 public class JobDefinition
 {
     public string Name { get; set; } = string.Empty;

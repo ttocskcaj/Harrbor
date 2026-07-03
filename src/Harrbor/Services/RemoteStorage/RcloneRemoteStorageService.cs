@@ -1,49 +1,84 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
-using Microsoft.Extensions.Options;
-using Harrbor.Configuration;
+using Harrbor.Configuration.Connections;
+using Harrbor.Services.Configuration;
 
 namespace Harrbor.Services.RemoteStorage;
 
-public partial class RcloneRemoteStorageService : IRemoteStorageService
+public partial class RcloneRemoteStorageService : IRemoteStorageService, IDisposable
 {
-    private readonly RemoteStorageOptions _options;
+    private readonly IConnectionStore _connectionStore;
     private readonly ILogger<RcloneRemoteStorageService> _logger;
-    private readonly string _remotePrefix;
+
+    // The transfer phase fans out TransferParallelism tasks over this one scoped
+    // instance, so the cache must be safe for concurrent readers: an immutable
+    // record behind a volatile reference, with a semaphore so `rclone obscure`
+    // runs at most once per config version.
+    private sealed record CachedConnection(string Prefix, RemoteStorageSettings Settings, int Version);
+    private volatile CachedConnection? _cached;
+    private readonly SemaphoreSlim _cacheLock = new(1, 1);
 
     public RcloneRemoteStorageService(
-        IOptions<RemoteStorageOptions> options,
+        IConnectionStore connectionStore,
         ILogger<RcloneRemoteStorageService> logger)
     {
-        _options = options.Value;
+        _connectionStore = connectionStore;
         _logger = logger;
-        _remotePrefix = BuildRemotePrefix();
-        _logger.LogDebug("Rclone remote prefix: {RemotePrefix}", RedactSensitiveArgs(_remotePrefix));
     }
 
-    private string BuildRemotePrefix()
+    private async Task<(string Prefix, RemoteStorageSettings Settings)> GetConnectionAsync(CancellationToken cancellationToken)
+    {
+        var stamped = await _connectionStore.GetAsync<RemoteStorageSettings>(cancellationToken)
+            ?? throw new ServiceNotConfiguredException("Remote storage");
+
+        var cached = _cached;
+        if (cached is not null && cached.Version == stamped.Version)
+            return (cached.Prefix, cached.Settings);
+
+        await _cacheLock.WaitAsync(cancellationToken);
+        try
+        {
+            cached = _cached;
+            if (cached is null || cached.Version != stamped.Version)
+            {
+                cached = new CachedConnection(BuildRemotePrefix(stamped.Settings), stamped.Settings, stamped.Version);
+                _cached = cached;
+                _logger.LogDebug("Rclone remote prefix: {RemotePrefix}", RedactSensitiveArgs(cached.Prefix));
+            }
+
+            return (cached.Prefix, cached.Settings);
+        }
+        finally
+        {
+            _cacheLock.Release();
+        }
+    }
+
+    public void Dispose() => _cacheLock.Dispose();
+
+    private static string BuildRemotePrefix(RemoteStorageSettings settings)
     {
         var parts = new List<string> { ":sftp" };
 
-        if (!string.IsNullOrEmpty(_options.Host))
-            parts.Add($"host={_options.Host}");
+        if (!string.IsNullOrEmpty(settings.Host))
+            parts.Add($"host={settings.Host}");
 
-        if (_options.Port != 22)
-            parts.Add($"port={_options.Port}");
+        if (settings.Port != 22)
+            parts.Add($"port={settings.Port}");
 
-        if (!string.IsNullOrEmpty(_options.User))
-            parts.Add($"user={_options.User}");
+        if (!string.IsNullOrEmpty(settings.User))
+            parts.Add($"user={settings.User}");
 
-        if (!string.IsNullOrEmpty(_options.Password))
-            parts.Add($"pass={ObscurePassword(_options.Password)}");
+        if (!string.IsNullOrEmpty(settings.Password))
+            parts.Add($"pass={ObscurePassword(settings.Password)}");
 
-        if (!string.IsNullOrEmpty(_options.KeyFile))
-            parts.Add($"key_file={_options.KeyFile}");
+        if (!string.IsNullOrEmpty(settings.KeyFile))
+            parts.Add($"key_file={settings.KeyFile}");
 
-        if (!string.IsNullOrEmpty(_options.KeyFilePassphrase))
-            parts.Add($"key_file_pass={ObscurePassword(_options.KeyFilePassphrase)}");
+        if (!string.IsNullOrEmpty(settings.KeyFilePassphrase))
+            parts.Add($"key_file_pass={ObscurePassword(settings.KeyFilePassphrase)}");
 
-        if (_options.UseAgent)
+        if (settings.UseAgent)
             parts.Add("key_use_agent=true");
 
         return string.Join(",", parts) + ":";
@@ -90,7 +125,8 @@ public partial class RcloneRemoteStorageService : IRemoteStorageService
         CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
-        var remoteSource = $"{_remotePrefix}{sourcePath}";
+        var (remotePrefix, settings) = await GetConnectionAsync(cancellationToken);
+        var remoteSource = $"{remotePrefix}{sourcePath}";
 
         var args = new List<string>
         {
@@ -103,11 +139,11 @@ public partial class RcloneRemoteStorageService : IRemoteStorageService
             "--log-level=INFO",
             "--low-level-retries=10",
             "--no-update-modtime",
-            $"--transfers={_options.Transfers}",
-            $"--checkers={_options.Checkers}"
+            $"--transfers={settings.Transfers}",
+            $"--checkers={settings.Checkers}"
         };
 
-        args.AddRange(_options.AdditionalFlags);
+        args.AddRange(settings.AdditionalFlags);
 
         var argString = string.Join(" ", args);
 
@@ -201,17 +237,30 @@ public partial class RcloneRemoteStorageService : IRemoteStorageService
 
     public async Task<RemoteStorageConnectionResult> TestConnectionAsync(CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug("Testing rclone SFTP connection to {Host}", _options.Host);
+        var stamped = await _connectionStore.GetAsync<RemoteStorageSettings>(cancellationToken);
+        if (stamped is null)
+            return new RemoteStorageConnectionResult(false, "Remote storage is not configured");
+
+        return await TestConnectionAsync(stamped.Settings, cancellationToken);
+    }
+
+    public async Task<RemoteStorageConnectionResult> TestConnectionAsync(
+        RemoteStorageSettings settings,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Testing rclone SFTP connection to {Host}", settings.Host);
 
         try
         {
+            var remotePrefix = BuildRemotePrefix(settings);
+
             // Test by listing the root of the remote
             using var process = new Process
             {
                 StartInfo = new ProcessStartInfo
                 {
                     FileName = "rclone",
-                    Arguments = $"lsf \"{_remotePrefix}/\" --max-depth=1",
+                    Arguments = $"lsf \"{remotePrefix}/\" --max-depth=1",
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
@@ -238,7 +287,8 @@ public partial class RcloneRemoteStorageService : IRemoteStorageService
 
     public async Task<bool> ExistsAsync(string path, CancellationToken cancellationToken = default)
     {
-        var remotePath = $"{_remotePrefix}{path}";
+        var (remotePrefix, _) = await GetConnectionAsync(cancellationToken);
+        var remotePath = $"{remotePrefix}{path}";
 
         using var process = new Process
         {

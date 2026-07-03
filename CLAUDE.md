@@ -24,7 +24,8 @@ dotnet test src/Harrbor.Tests/Harrbor.Tests.csproj --filter "FullyQualifiedName~
 # Docker build
 docker build -t harrbor .
 
-# EF Core migrations (from src/Harrbor directory)
+# EF Core migrations (dotnet-ef is a local tool; run `dotnet tool restore` once)
+# From the src/Harrbor directory:
 dotnet ef migrations add MigrationName
 dotnet ef database update
 
@@ -38,7 +39,7 @@ pnpm build            # type-check (tsc -b) + production build to ui/dist
 
 ### Core Workflow (OrchestrationWorker)
 
-The service runs as a `BackgroundService` with a reconciliation loop for each configured job. Each cycle processes releases through six sequential phases:
+`OrchestrationWorker` is a `BackgroundService` running a single scheduler loop (5-second tick) that re-reads enabled jobs from the database every tick and starts a reconciliation cycle for each job whose polling interval has elapsed (no overlapping cycles per job). Each cycle runs in its own DI scope via `JobCycleRunner` and processes releases through six sequential phases:
 
 1. **Discover** - Query Sonarr/Radarr queue for new downloads, create `TrackedRelease` records
 2. **Process Downloads** - Check qBittorrent for completed torrents, update status when progress=100%
@@ -63,14 +64,11 @@ The service runs as a `BackgroundService` with a reconciliation loop for each co
 
 ### Configuration
 
-Jobs are configured in `appsettings.json` under the `Jobs.Definitions` array. Each job specifies:
-- `ServiceType` (Sonarr/Radarr)
-- `RemotePath` / `StagingPath`
-- `QBittorrentCategory` for filtering
-- `TransferParallelism`, `MaxTransferRetries`, `TransferRetryDelay`
-- `CompletedCategory` for archival
+All operational configuration lives in the SQLite database and is managed through the REST API under `/api` — changes apply live (connections on next use, jobs on the next scheduler tick):
+- **Connections** (`ServiceConnections` table, one JSON-settings row per type): qBittorrent, Sonarr, Radarr, Remote Storage/SFTP. Accessed via the singleton `IConnectionStore`; rows carry a `Version` stamp consumers use to rebuild expensive clients only when config changes. Secrets are stored plaintext (Servarr-style) but are **write-only through the API** (`passwordSet`/`apiKeySet` flags; null keeps, `""` clears, value replaces).
+- **Jobs** (`Jobs` table, typed columns): full CRUD at `/api/jobs`; `POST /api/connections/{type}/test` tests unsaved payloads with stored-secret fallback. `JobDefinition` remains the immutable per-cycle snapshot type passed to phase handlers (`Job.ToDefinition()`).
 
-Use `appsettings.local.json` for local development overrides (not committed).
+Only bootstrap config stays file-based (`appsettings.default.json`): `Serilog` and `Harrbor:DataPath`. `appsettings.local.json` (not committed) can still override those.
 
 ## Key Packages
 

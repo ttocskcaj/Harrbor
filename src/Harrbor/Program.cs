@@ -1,11 +1,16 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Serilog;
+using Harrbor.Api;
 using Harrbor.Configuration;
 using Harrbor.Data;
 using Harrbor.Data.Entities;
 using Harrbor.HealthChecks;
 using Harrbor.Services;
 using Harrbor.Services.Clients;
+using Harrbor.Services.Configuration;
 using Harrbor.Services.Orchestration;
 using Harrbor.Services.RemoteStorage;
 using Harrbor.Services.Orchestration.Phases;
@@ -31,19 +36,9 @@ try
         .ReadFrom.Services(services)
         .Enrich.FromLogContext());
 
-    // Configuration
+    // Bootstrap configuration (connection + job config lives in the database)
     builder.Services.Configure<HarrborOptions>(
         builder.Configuration.GetSection(HarrborOptions.SectionName));
-    builder.Services.Configure<QBittorrentOptions>(
-        builder.Configuration.GetSection(QBittorrentOptions.SectionName));
-    builder.Services.Configure<SonarrOptions>(
-        builder.Configuration.GetSection(SonarrOptions.SectionName));
-    builder.Services.Configure<RadarrOptions>(
-        builder.Configuration.GetSection(RadarrOptions.SectionName));
-    builder.Services.Configure<RemoteStorageOptions>(
-        builder.Configuration.GetSection(RemoteStorageOptions.SectionName));
-    builder.Services.Configure<JobOptions>(
-        builder.Configuration.GetSection(JobOptions.SectionName));
 
     // Database
     var harrborOptions = builder.Configuration
@@ -53,10 +48,13 @@ try
     var dbPath = Path.Combine(harrborOptions.DataPath, "harrbor.sqlite");
     Directory.CreateDirectory(harrborOptions.DataPath);
 
-    builder.Services.AddDbContext<HarrborDbContext>(options =>
+    // Factory registration also registers a scoped HarrborDbContext, so scoped
+    // consumers keep injecting the context directly while singletons use the factory.
+    builder.Services.AddDbContextFactory<HarrborDbContext>(options =>
         options.UseSqlite($"Data Source={dbPath}"));
 
     // Services
+    builder.Services.AddSingleton<IConnectionStore, ConnectionStore>();
     builder.Services.AddSingleton<IQBittorrentClient, QBittorrentClientWrapper>();
     builder.Services.AddScoped<IRemoteStorageService, RcloneRemoteStorageService>();
     builder.Services.AddScoped<IMediaServiceResolver, MediaServiceResolver>();
@@ -67,9 +65,6 @@ try
     builder.Services.AddHttpClient<IRadarrClient, RadarrClient>()
         .AddStandardResilienceHandler();
 
-    // Startup validation
-    builder.Services.AddTransient<StartupValidator>();
-
     // Phase Handlers
     builder.Services.AddScoped<IDiscoveryPhaseHandler, DiscoveryPhaseHandler>();
     builder.Services.AddScoped<IDownloadPhaseHandler, DownloadPhaseHandler>();
@@ -79,7 +74,14 @@ try
     builder.Services.AddScoped<IArchivalPhaseHandler, ArchivalPhaseHandler>();
 
     // Background Worker
+    builder.Services.AddScoped<IJobCycleRunner, JobCycleRunner>();
+    builder.Services.TryAddSingleton(TimeProvider.System);
     builder.Services.AddHostedService<OrchestrationWorker>();
+
+    // API
+    builder.Services.AddProblemDetails();
+    builder.Services.ConfigureHttpJsonOptions(options =>
+        options.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));
 
     // Health Checks
     builder.Services.AddHealthChecks()
@@ -95,6 +97,9 @@ try
     {
         var db = scope.ServiceProvider.GetRequiredService<HarrborDbContext>();
         db.Database.Migrate();
+
+        // WAL lets the orchestration worker and the config API write concurrently
+        db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
 
         // Reset any stuck InProgress transfers (from interrupted runs)
         var stuckTransfers = await db.TrackedReleases
@@ -117,18 +122,14 @@ try
         }
     }
 
-    // Validate external service connections
-    using (var scope = app.Services.CreateScope())
-    {
-        var validator = scope.ServiceProvider.GetRequiredService<StartupValidator>();
-        await validator.ValidateAsync();
-    }
-
     app.UseSerilogRequestLogging();
 
     // Serve the built UI from wwwroot (present in the Docker image; absent locally is fine)
     app.UseDefaultFiles();
     app.UseStaticFiles();
+
+    // Configuration API
+    app.MapApiEndpoints();
 
     // Health check endpoints
     app.MapHealthChecks("/health");
@@ -146,7 +147,9 @@ try
 
     app.Run();
 }
-catch (Exception ex)
+// HostAbortedException must propagate: WebApplicationFactory and dotnet-ef abort
+// the entry point with it as part of their host-capture handshake
+catch (Exception ex) when (ex is not Microsoft.Extensions.Hosting.HostAbortedException)
 {
     Log.Fatal(ex, "Application terminated unexpectedly");
 }
@@ -154,3 +157,6 @@ finally
 {
     Log.CloseAndFlush();
 }
+
+// Exposes the entry point to WebApplicationFactory-based integration tests
+public partial class Program { }

@@ -1,3 +1,5 @@
+using Harrbor.Configuration.Connections;
+
 namespace Harrbor.Services.RemoteStorage;
 
 public record TransferResult(
@@ -18,4 +20,9 @@ public interface IRemoteStorageService
     Task<bool> ExistsAsync(string path, CancellationToken cancellationToken = default);
 
     Task<RemoteStorageConnectionResult> TestConnectionAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Tests connectivity using an explicit (possibly not-yet-saved) settings payload.
+    /// </summary>
+    Task<RemoteStorageConnectionResult> TestConnectionAsync(RemoteStorageSettings settings, CancellationToken cancellationToken = default);
 }

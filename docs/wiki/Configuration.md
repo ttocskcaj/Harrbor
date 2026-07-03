@@ -1,8 +1,10 @@
 # Configuration
 
-Harrbor is configured via `appsettings.json`. For local development, use `appsettings.local.json` (git-ignored).
+Harrbor stores all of its operational configuration — service connections and jobs — in its SQLite database, managed through the REST API (and the web UI built on top of it). A fresh install starts unconfigured: connect your services and create a job via the API/UI and changes apply live, with no restart.
 
-## Full Example
+Only **bootstrap configuration** (logging and the data directory) lives in `appsettings.json` / environment variables, because it is needed before the database exists.
+
+## Bootstrap Configuration (file / environment)
 
 ```json
 {
@@ -13,122 +15,66 @@ Harrbor is configured via `appsettings.json`. For local development, use `appset
   },
   "Harrbor": {
     "DataPath": "./data"
-  },
-  "QBittorrent": {
-    "BaseUrl": "http://seedbox.example.com:8080",
-    "Username": "admin",
-    "Password": "your-password"
-  },
-  "Sonarr": {
-    "BaseUrl": "http://localhost:8989",
-    "ApiKey": "your-sonarr-api-key",
-    "Enabled": true
-  },
-  "Radarr": {
-    "BaseUrl": "http://localhost:7878",
-    "ApiKey": "your-radarr-api-key",
-    "Enabled": true
-  },
-  "RemoteStorage": {
-    "Host": "seedbox.example.com",
-    "Port": 22,
-    "User": "seedbox-user",
-    "KeyFile": "/home/harrbor/.ssh/id_ed25519",
-    "Transfers": 4,
-    "Checkers": 8
-  },
-  "Jobs": {
-    "Definitions": [
-      {
-        "Name": "tv-shows",
-        "PollingInterval": "00:01:00",
-        "ServiceType": "Sonarr",
-        "RemotePath": "/downloads/tv",
-        "StagingPath": "/staging/tv",
-        "QBittorrentCategory": "tv-sonarr",
-        "CompletedCategory": "tv-archived",
-        "TransferParallelism": 2,
-        "MaxTransferRetries": 3,
-        "TransferRetryDelay": "00:05:00",
-        "ImportTimeout": "1.00:00:00",
-        "Enabled": true
-      },
-      {
-        "Name": "movies",
-        "PollingInterval": "00:01:00",
-        "ServiceType": "Radarr",
-        "RemotePath": "/downloads/movies",
-        "StagingPath": "/staging/movies",
-        "QBittorrentCategory": "movies-radarr",
-        "CompletedCategory": "movies-archived",
-        "TransferParallelism": 2,
-        "Enabled": true
-      }
-    ]
   }
 }
 ```
 
-## Section Reference
-
-### Harrbor
-
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `DataPath` | `./data` | Directory for SQLite database |
+| `Harrbor:DataPath` | `./data` | Directory for the SQLite database (`harrbor.sqlite`) |
+| `Serilog:*` | see `appsettings.default.json` | Logging levels and sinks |
 
-### QBittorrent
+Environment variables override file values (e.g. `Harrbor__DataPath=/app/data`).
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `BaseUrl` | - | qBittorrent Web UI URL |
-| `Username` | - | Login username |
-| `Password` | - | Login password |
+## Connections API
 
-### Sonarr / Radarr
+One connection per external service. Secrets are **write-only**: responses never include the stored password/API key, only a `passwordSet` / `apiKeySet` flag. In update requests, omitting a secret keeps the stored value, sending `""` clears it, and any other value replaces it.
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `BaseUrl` | - | API base URL |
-| `ApiKey` | - | API key (Settings → General) |
-| `Enabled` | `true` | Enable/disable this service |
+| Endpoint | Methods | Notes |
+|----------|---------|-------|
+| `/api/connections` | GET | Summary of all four connections (`configured`, `updatedAtUtc`) |
+| `/api/connections/qbittorrent` | GET, PUT | `baseUrl`, `username`, `password` (secret) |
+| `/api/connections/sonarr` | GET, PUT | `baseUrl`, `apiKey` (secret), `enabled` |
+| `/api/connections/radarr` | GET, PUT | `baseUrl`, `apiKey` (secret), `enabled` |
+| `/api/connections/remote-storage` | GET, PUT | `host`, `port`, `user`, `password` (secret), `keyFile`, `keyFilePassphrase` (secret), `useAgent`, `transfers`, `checkers`, `additionalFlags` |
+| `/api/connections/{type}/test` | POST | Tests the posted settings against the real service without saving. Omitted secrets fall back to stored values, so you can test after editing only the host. |
 
-### RemoteStorage
+Validation errors come back as HTTP 400 with a field-keyed `errors` object.
 
-Settings for rclone SFTP transfers.
+## Jobs API
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `Host` | - | Seedbox hostname |
-| `Port` | `22` | SSH port |
-| `User` | - | SSH username |
-| `Password` | `null` | SSH password (prefer key auth) |
-| `KeyFile` | `null` | Path to SSH private key |
-| `KeyFilePassphrase` | `null` | Passphrase for encrypted key |
-| `UseAgent` | `false` | Use SSH agent for auth |
-| `Transfers` | `4` | Concurrent file transfers |
-| `Checkers` | `8` | Concurrent file checkers |
-| `AdditionalFlags` | `[]` | Extra rclone flags |
+Each job watches one qBittorrent category and runs the six-phase pipeline on its own polling interval. Full CRUD:
 
-### Jobs
+| Endpoint | Methods |
+|----------|---------|
+| `/api/jobs` | GET, POST |
+| `/api/jobs/{id}` | GET, PUT, DELETE |
 
-Each job monitors a specific category of downloads.
+Deleting a job that still has releases mid-pipeline returns **409 Conflict** with the active release count; re-issue the delete with `?force=true` to remove the job anyway (its tracked releases are kept as history but stop being processed). Disabling a job pauses it — releases freeze mid-pipeline and resume when re-enabled.
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `Name` | - | Unique job identifier |
-| `PollingInterval` | `00:01:00` | Time between reconciliation cycles |
-| `ServiceType` | `Sonarr` | `Sonarr` or `Radarr` |
-| `RemotePath` | - | Base path on seedbox |
-| `StagingPath` | - | Local staging directory |
-| `QBittorrentCategory` | - | Filter torrents by category |
-| `QBittorrentTags` | `[]` | Filter torrents by tags |
-| `CompletedCategory` | `null` | Category for archived torrents |
-| `TransferParallelism` | `2` | Max concurrent transfers |
-| `MaxTransferRetries` | `3` | Retry attempts for failed transfers |
-| `TransferRetryDelay` | `00:05:00` | Cooldown between retries |
-| `ImportTimeout` | `1.00:00:00` | Max time to wait for import |
-| `Enabled` | `true` | Enable/disable this job |
+### Job fields
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `name` | - | Unique job identifier |
+| `enabled` | `true` | Enable/disable this job |
+| `serviceType` | `sonarr` | `sonarr` or `radarr` |
+| `pollingIntervalSeconds` | `60` | Time between reconciliation cycles (10–86400) |
+| `remotePath` | - | Base path on seedbox (absolute) |
+| `stagingPath` | - | Local staging directory (absolute, must be writable) |
+| `qbittorrentCategory` | - | Filter torrents by category |
+| `qbittorrentTags` | `[]` | Filter torrents by tags |
+| `completedCategory` | `null` | Category for archived torrents |
+| `transferParallelism` | `2` | Max concurrent transfers (1–16) |
+| `maxTransferRetries` | `3` | Retry attempts for failed transfers (0–20) |
+| `transferRetryDelaySeconds` | `300` | Cooldown between retries |
+| `importTimeoutSeconds` | `86400` | Max time to wait for import (60–604800) |
+
+Job responses additionally report `lastRunAtUtc`, `nextRunAtUtc`, and `activeReleaseCount`.
+
+### When changes take effect
+
+The scheduler re-reads jobs from the database every 5 seconds, so job changes (create, edit, enable/disable, interval) apply on the next poll cycle. Connection changes apply on next use — a cycle already in flight finishes with the settings it started with.
 
 ## Sonarr/Radarr Setup
 

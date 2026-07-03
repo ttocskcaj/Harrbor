@@ -1,26 +1,33 @@
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-using Microsoft.Extensions.Options;
-using Harrbor.Configuration;
+using Harrbor.Configuration.Connections;
 using Harrbor.Services.Clients;
+using Harrbor.Services.Configuration;
 
 namespace Harrbor.HealthChecks;
 
 public class SonarrHealthCheck : IHealthCheck
 {
     private readonly ISonarrClient _client;
-    private readonly SonarrOptions _options;
+    private readonly IConnectionStore _connectionStore;
 
-    public SonarrHealthCheck(ISonarrClient client, IOptions<SonarrOptions> options)
+    public SonarrHealthCheck(ISonarrClient client, IConnectionStore connectionStore)
     {
         _client = client;
-        _options = options.Value;
+        _connectionStore = connectionStore;
     }
 
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
-        if (!_options.Enabled)
+        var stamped = await _connectionStore.GetAsync<SonarrSettings>(cancellationToken);
+
+        if (stamped is null)
+        {
+            return HealthCheckResult.Degraded("Sonarr is not configured");
+        }
+
+        if (!stamped.Settings.Enabled)
         {
             return HealthCheckResult.Healthy("Sonarr integration is disabled");
         }

@@ -1,3 +1,4 @@
+using Harrbor.Configuration.Connections;
 using QBittorrent.Client;
 
 namespace Harrbor.Services.Clients;
@@ -20,4 +21,9 @@ public interface IQBittorrentClient
     Task<IReadOnlyList<string>> GetCategoriesAsync(CancellationToken cancellationToken = default);
     Task<bool> IsConnectedAsync(CancellationToken cancellationToken = default);
     Task<ConnectionTestResult> TestConnectionAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Tests connectivity using an explicit (possibly not-yet-saved) settings payload.
+    /// </summary>
+    Task<ConnectionTestResult> TestConnectionAsync(QBittorrentSettings settings, CancellationToken cancellationToken = default);
 }

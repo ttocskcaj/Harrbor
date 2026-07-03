@@ -1,3 +1,4 @@
+using System.Net;
 using FakeItEasy;
 using FluentAssertions;
 using Harrbor.Data.Entities;
@@ -203,6 +204,123 @@ public class DownloadPhaseTests
         // Assert
         var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
         updatedRelease.RemotePath.Should().Be("/downloads/Test.Release");
+    }
+
+    [Fact]
+    public async Task ProcessDownloads_GetTorrentThrows_SkipsReleaseAndProcessesOthers()
+    {
+        // Arrange - one release whose qBittorrent query fails transiently, one healthy release
+        using var dbContext = TestDbContextFactory.Create();
+        var failing = new TrackedReleaseBuilder()
+            .WithDownloadId("BAD")
+            .WithName("Failing Release")
+            .WithJobName("test-job")
+            .WithDownloadStatus(DownloadStatus.Pending)
+            .Build();
+        var healthy = new TrackedReleaseBuilder()
+            .WithDownloadId("GOOD")
+            .WithName("Healthy Release")
+            .WithJobName("test-job")
+            .WithDownloadStatus(DownloadStatus.Pending)
+            .WithRemotePath("/downloads/healthy")
+            .Build();
+        dbContext.TrackedReleases.AddRange(failing, healthy);
+        await dbContext.SaveChangesAsync();
+
+        A.CallTo(() => _qBittorrentClient.GetTorrentAsync("BAD", A<CancellationToken>._))
+            .Throws(new QBittorrentClientRequestException("forbidden", HttpStatusCode.Forbidden));
+        A.CallTo(() => _qBittorrentClient.GetTorrentAsync("GOOD", A<CancellationToken>._))
+            .Returns(new TorrentInfo
+            {
+                Hash = "GOOD",
+                Name = "Healthy Release",
+                Progress = 1.0,
+                ContentPath = "/downloads/healthy"
+            });
+
+        var job = new JobDefinitionBuilder().WithName("test-job").Build();
+        var handler = CreateHandler();
+
+        // Act - a single torrent's failure must not abort the whole phase
+        var act = async () => await handler.ExecuteAsync(job, dbContext, _qBittorrentClient, CancellationToken.None);
+
+        // Assert
+        await act.Should().NotThrowAsync();
+
+        var failingAfter = await dbContext.TrackedReleases.FirstAsync(r => r.DownloadId == "BAD");
+        failingAfter.DownloadStatus.Should().Be(DownloadStatus.Pending, "the failed release is skipped and retried next cycle");
+        failingAfter.LastError.Should().Be("forbidden", "the transient error is recorded for visibility");
+        failingAfter.LastErrorAtUtc.Should().NotBeNull();
+        failingAfter.ErrorCount.Should().Be(0, "a download-query hiccup must not consume the transfer-phase retry budget");
+
+        var healthyAfter = await dbContext.TrackedReleases.FirstAsync(r => r.DownloadId == "GOOD");
+        healthyAfter.DownloadStatus.Should().Be(DownloadStatus.Completed, "other releases are still processed");
+    }
+
+    [Fact]
+    public async Task ProcessDownloads_CompletionClearsStaleErrorFromPreviousCycle()
+    {
+        // Arrange - a release that failed its query last cycle (LastError set) now completes
+        using var dbContext = TestDbContextFactory.Create();
+        var release = new TrackedReleaseBuilder()
+            .WithDownloadId("HASH")
+            .WithName("Recovered Release")
+            .WithJobName("test-job")
+            .WithDownloadStatus(DownloadStatus.Pending)
+            .Build();
+        release.LastError = "forbidden";
+        release.LastErrorAtUtc = DateTime.UtcNow.AddMinutes(-5);
+        dbContext.TrackedReleases.Add(release);
+        await dbContext.SaveChangesAsync();
+
+        A.CallTo(() => _qBittorrentClient.GetTorrentAsync("HASH", A<CancellationToken>._))
+            .Returns(new TorrentInfo
+            {
+                Hash = "HASH",
+                Name = "Recovered Release",
+                Progress = 1.0,
+                ContentPath = "/downloads/recovered"
+            });
+
+        var job = new JobDefinitionBuilder().WithName("test-job").Build();
+        var handler = CreateHandler();
+
+        // Act
+        await handler.ExecuteAsync(job, dbContext, _qBittorrentClient, CancellationToken.None);
+
+        // Assert - a stale error must not follow a completed download into the transfer phase
+        var updated = await dbContext.TrackedReleases.FirstAsync(r => r.DownloadId == "HASH");
+        updated.DownloadStatus.Should().Be(DownloadStatus.Completed);
+        updated.LastError.Should().BeNull();
+        updated.LastErrorAtUtc.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ProcessDownloads_UnexpectedException_PropagatesInsteadOfBeingSwallowed()
+    {
+        // Arrange - a non-HTTP exception represents a bug, not a transient qBittorrent failure,
+        // and must not be silently absorbed by the per-release isolation.
+        using var dbContext = TestDbContextFactory.Create();
+        var release = new TrackedReleaseBuilder()
+            .WithDownloadId("HASH")
+            .WithName("Buggy Release")
+            .WithJobName("test-job")
+            .WithDownloadStatus(DownloadStatus.Pending)
+            .Build();
+        dbContext.TrackedReleases.Add(release);
+        await dbContext.SaveChangesAsync();
+
+        A.CallTo(() => _qBittorrentClient.GetTorrentAsync("HASH", A<CancellationToken>._))
+            .Throws(new InvalidOperationException("unexpected"));
+
+        var job = new JobDefinitionBuilder().WithName("test-job").Build();
+        var handler = CreateHandler();
+
+        // Act
+        var act = async () => await handler.ExecuteAsync(job, dbContext, _qBittorrentClient, CancellationToken.None);
+
+        // Assert
+        await act.Should().ThrowAsync<InvalidOperationException>();
     }
 
     [Fact]

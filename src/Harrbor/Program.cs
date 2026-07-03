@@ -126,6 +126,10 @@ try
 
     app.UseSerilogRequestLogging();
 
+    // Serve the built UI from wwwroot (present in the Docker image; absent locally is fine)
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+
     // Health check endpoints
     app.MapHealthChecks("/health");
     app.MapHealthChecks("/health/ready", new()
@@ -136,6 +140,9 @@ try
     {
         Predicate = _ => false // Liveness just checks the app is running
     });
+
+    // SPA fallback: unmatched extension-less routes serve the UI
+    app.MapFallbackToFile("index.html");
 
     app.Run();
 }

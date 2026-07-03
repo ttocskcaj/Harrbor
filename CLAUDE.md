@@ -27,6 +27,11 @@ docker build -t harrbor .
 # EF Core migrations (from src/Harrbor directory)
 dotnet ef migrations add MigrationName
 dotnet ef database update
+
+# UI (from ui/ directory)
+pnpm install          # restore dependencies
+pnpm dev              # dev server on :5173 with proxy to backend on :8080
+pnpm build            # type-check (tsc -b) + production build to ui/dist
 ```
 
 ## Architecture

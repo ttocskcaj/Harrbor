@@ -18,6 +18,23 @@ RUN dotnet publish src/Harrbor/Harrbor.csproj \
     -o /app/publish \
     --no-restore
 
+# UI build stage
+# --platform=$BUILDPLATFORM: static output is arch-independent, so build once
+# natively instead of per-arch under QEMU during multi-arch builds
+FROM --platform=$BUILDPLATFORM node:24-alpine AS ui-build
+WORKDIR /ui
+
+# corepack is deprecated; install pnpm directly (exact version pinned in ui/package.json)
+RUN npm install -g pnpm@11
+
+# Copy manifests first for layer caching
+COPY ui/package.json ui/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+
+# Copy source and build (runs tsc -b && vite build)
+COPY ui/ ./
+RUN pnpm build
+
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
 
@@ -53,6 +70,9 @@ RUN apk add --no-cache rclone shadow su-exec tzdata \
 
 # Copy published app
 COPY --from=build /app/publish .
+
+# Copy built UI into wwwroot for static file serving
+COPY --from=ui-build /ui/dist ./wwwroot
 
 # Copy entrypoint script
 COPY entrypoint.sh /entrypoint.sh

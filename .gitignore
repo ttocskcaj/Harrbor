@@ -72,6 +72,10 @@ Desktop.ini
 .AppleDouble
 .LSOverride
 
+# Node / UI
+node_modules/
+ui/dist/
+
 # Application-specific
 appsettings.local.json
 *.db

@@ -3,6 +3,10 @@
 **/obj/
 **/out/
 
+# Node
+**/node_modules/
+ui/dist/
+
 # IDE
 .vs/
 .vscode/

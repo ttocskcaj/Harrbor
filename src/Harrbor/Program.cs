@@ -7,7 +7,6 @@ using Harrbor.Api;
 using Harrbor.Configuration;
 using Harrbor.Data;
 using Harrbor.Data.Entities;
-using Harrbor.HealthChecks;
 using Harrbor.Services;
 using Harrbor.Services.Clients;
 using Harrbor.Services.Configuration;
@@ -85,10 +84,7 @@ try
 
     // Health Checks
     builder.Services.AddHealthChecks()
-        .AddDbContextCheck<HarrborDbContext>("database", tags: ["ready"])
-        .AddCheck<QBittorrentHealthCheck>("qbittorrent", tags: ["ready"])
-        .AddCheck<SonarrHealthCheck>("sonarr", tags: ["ready"])
-        .AddCheck<RadarrHealthCheck>("radarr", tags: ["ready"]);
+        .AddDbContextCheck<HarrborDbContext>("database", tags: ["ready"]);
 
     var app = builder.Build();
 
@@ -147,6 +143,7 @@ try
 
     app.Run();
 }
+
 // HostAbortedException must propagate: WebApplicationFactory and dotnet-ef abort
 // the entry point with it as part of their host-capture handshake
 catch (Exception ex) when (ex is not Microsoft.Extensions.Hosting.HostAbortedException)

@@ -15,11 +15,15 @@ dotnet build src/Harrbor/Harrbor.csproj
 # Run
 dotnet run --project src/Harrbor/Harrbor.csproj
 
-# Run tests
-dotnet test src/Harrbor.Tests/Harrbor.Tests.csproj
+# Run all tests (unit + integration, discovered via the solution)
+dotnet test
+
+# Run only unit tests / only integration tests
+dotnet test src/Harrbor.Tests.Unit/Harrbor.Tests.Unit.csproj
+dotnet test src/Harrbor.Tests.Integration/Harrbor.Tests.Integration.csproj
 
 # Run a single test
-dotnet test src/Harrbor.Tests/Harrbor.Tests.csproj --filter "FullyQualifiedName~TestMethodName"
+dotnet test --filter "FullyQualifiedName~TestMethodName"
 
 # Docker build
 docker build -t harrbor .

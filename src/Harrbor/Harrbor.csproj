@@ -7,7 +7,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="Harrbor.Tests" />
+    <InternalsVisibleTo Include="Harrbor.Tests.Common" />
+    <InternalsVisibleTo Include="Harrbor.Tests.Unit" />
+    <InternalsVisibleTo Include="Harrbor.Tests.Integration" />
   </ItemGroup>
 
   <ItemGroup>

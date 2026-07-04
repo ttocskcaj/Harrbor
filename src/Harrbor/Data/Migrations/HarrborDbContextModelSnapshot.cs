@@ -176,6 +176,9 @@ namespace Harrbor.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("Outcome")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("RemotePath")
                         .IsRequired()
                         .HasMaxLength(1000)
@@ -205,6 +208,8 @@ namespace Harrbor.Data.Migrations
                     b.HasIndex("ImportStatus");
 
                     b.HasIndex("JobName");
+
+                    b.HasIndex("Outcome");
 
                     b.HasIndex("TransferStatus");
 

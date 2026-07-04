@@ -105,6 +105,7 @@ public class ImportPhaseTests
         // Assert
         var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
         updatedRelease.ImportStatus.Should().Be(ImportStatus.Failed);
+        updatedRelease.Outcome.Should().Be(PipelineOutcome.Failed);
         updatedRelease.LastError.Should().Contain("removed from queue without import");
     }
 
@@ -175,6 +176,7 @@ public class ImportPhaseTests
         // Assert
         var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
         updatedRelease.ImportStatus.Should().Be(ImportStatus.Failed);
+        updatedRelease.Outcome.Should().Be(PipelineOutcome.Failed);
         updatedRelease.LastError.Should().Contain("timeout");
     }
 

@@ -251,7 +251,8 @@ public class JobEndpointsTests : IDisposable
                 JobName = "tv-shows",
                 RemotePath = "/r",
                 StagingPath = "/s",
-                ArchivalStatus = ArchivalStatus.Completed
+                ArchivalStatus = ArchivalStatus.Completed,
+                Outcome = PipelineOutcome.Completed
             });
             await db.SaveChangesAsync();
         }
@@ -277,7 +278,8 @@ public class JobEndpointsTests : IDisposable
                 new TrackedRelease
                 {
                     DownloadId = "a2", Name = "R2", JobName = "tv-shows",
-                    RemotePath = "/r", StagingPath = "/s", ArchivalStatus = ArchivalStatus.Completed
+                    RemotePath = "/r", StagingPath = "/s",
+                    ArchivalStatus = ArchivalStatus.Completed, Outcome = PipelineOutcome.Completed
                 });
             await db.SaveChangesAsync();
         }
@@ -295,5 +297,68 @@ public class JobEndpointsTests : IDisposable
         var raw = await _client.GetStringAsync("/api/jobs");
 
         raw.Should().Contain("\"serviceType\":\"sonarr\"");
+    }
+
+    [Fact]
+    public async Task CloneJob_NoName_CreatesDisabledCopyOfSettings()
+    {
+        var created = await (await _client.PostAsJsonAsync("/api/jobs", ValidRequest("tv-shows"), TestJson.Options))
+            .Content.ReadFromJsonAsync<JobResponse>(TestJson.Options);
+
+        var response = await _client.PostAsJsonAsync($"/api/jobs/{created!.Id}/clone", new CloneJobRequest());
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var clone = await response.Content.ReadFromJsonAsync<JobResponse>(TestJson.Options);
+        clone!.Name.Should().Be("tv-shows-copy");
+        clone.Enabled.Should().BeFalse();
+        clone.Id.Should().NotBe(created.Id);
+        clone.QBittorrentCategory.Should().Be(created.QBittorrentCategory);
+        clone.StagingPath.Should().Be(created.StagingPath);
+        clone.LastRunAtUtc.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task CloneJob_WithName_UsesProvidedName()
+    {
+        var created = await (await _client.PostAsJsonAsync("/api/jobs", ValidRequest("tv-shows"), TestJson.Options))
+            .Content.ReadFromJsonAsync<JobResponse>(TestJson.Options);
+
+        var response = await _client.PostAsJsonAsync($"/api/jobs/{created!.Id}/clone", new CloneJobRequest { Name = "movies" });
+
+        var clone = await response.Content.ReadFromJsonAsync<JobResponse>(TestJson.Options);
+        clone!.Name.Should().Be("movies");
+    }
+
+    [Fact]
+    public async Task CloneJob_DuplicateName_Returns400()
+    {
+        var created = await (await _client.PostAsJsonAsync("/api/jobs", ValidRequest("tv-shows"), TestJson.Options))
+            .Content.ReadFromJsonAsync<JobResponse>(TestJson.Options);
+
+        var response = await _client.PostAsJsonAsync($"/api/jobs/{created!.Id}/clone", new CloneJobRequest { Name = "tv-shows" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task CloneJob_Twice_GeneratesUniqueNames()
+    {
+        var created = await (await _client.PostAsJsonAsync("/api/jobs", ValidRequest("tv-shows"), TestJson.Options))
+            .Content.ReadFromJsonAsync<JobResponse>(TestJson.Options);
+
+        var first = await (await _client.PostAsJsonAsync($"/api/jobs/{created!.Id}/clone", new CloneJobRequest()))
+            .Content.ReadFromJsonAsync<JobResponse>(TestJson.Options);
+        var second = await (await _client.PostAsJsonAsync($"/api/jobs/{created.Id}/clone", new CloneJobRequest()))
+            .Content.ReadFromJsonAsync<JobResponse>(TestJson.Options);
+
+        first!.Name.Should().Be("tv-shows-copy");
+        second!.Name.Should().Be("tv-shows-copy-2");
+    }
+
+    [Fact]
+    public async Task CloneJob_MissingSource_Returns404()
+    {
+        var response = await _client.PostAsJsonAsync("/api/jobs/9999/clone", new CloneJobRequest());
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 }

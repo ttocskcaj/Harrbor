@@ -22,6 +22,7 @@ public class CleanupPhaseHandler : ICleanupPhaseHandler
     {
         var pendingCleanup = await dbContext.TrackedReleases
             .Where(r => r.JobName == job.Name
+                && r.Outcome == PipelineOutcome.Active
                 && r.ImportStatus == ImportStatus.Completed
                 && r.CleanupStatus == CleanupStatus.Pending)
             .ToListAsync(cancellationToken);
@@ -65,6 +66,7 @@ public class CleanupPhaseHandler : ICleanupPhaseHandler
             catch (Exception ex)
             {
                 release.CleanupStatus = CleanupStatus.Failed;
+                release.Outcome = PipelineOutcome.Failed;
                 release.ErrorCount++;
                 release.LastError = ex.Message;
                 release.LastErrorAtUtc = DateTime.UtcNow;

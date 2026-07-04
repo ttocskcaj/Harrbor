@@ -33,6 +33,7 @@ public class ImportPhaseHandler : IImportPhaseHandler
     {
         var pendingImports = await dbContext.TrackedReleases
             .Where(r => r.JobName == job.Name
+                && r.Outcome == PipelineOutcome.Active
                 && r.TransferStatus == TransferStatus.Completed
                 && r.ImportStatus == ImportStatus.Pending)
             .ToListAsync(cancellationToken);
@@ -65,6 +66,7 @@ public class ImportPhaseHandler : IImportPhaseHandler
                 {
                     // Not in queue and no import history - likely failed or was removed
                     release.ImportStatus = ImportStatus.Failed;
+                    release.Outcome = PipelineOutcome.Failed;
                     release.LastError = "Download removed from queue without import confirmation";
                     release.LastErrorAtUtc = DateTime.UtcNow;
 
@@ -82,6 +84,7 @@ public class ImportPhaseHandler : IImportPhaseHandler
                     if (elapsed > job.ImportTimeout)
                     {
                         release.ImportStatus = ImportStatus.Failed;
+                        release.Outcome = PipelineOutcome.Failed;
                         release.LastError = $"Import timeout exceeded ({job.ImportTimeout})";
                         release.LastErrorAtUtc = DateTime.UtcNow;
 

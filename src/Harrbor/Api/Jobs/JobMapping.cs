@@ -87,6 +87,15 @@ public static class JobMapping
         job.UpdatedAtUtc = nowUtc;
     }
 
+    /// <summary>
+    /// When the scheduler will next run this job: null if disabled, "now" if it has never
+    /// run, otherwise the last run plus its polling interval. Shared by the jobs and
+    /// dashboard endpoints so both agree.
+    /// </summary>
+    public static DateTime? ComputeNextRunAtUtc(Job job, DateTime nowUtc) => !job.Enabled
+        ? null
+        : job.LastRunAtUtc is null ? nowUtc : job.LastRunAtUtc + job.PollingInterval;
+
     public static JobResponse ToResponse(Job job, int activeReleaseCount, DateTime nowUtc) => new()
     {
         Id = job.Id,
@@ -106,9 +115,7 @@ public static class JobMapping
         CreatedAtUtc = job.CreatedAtUtc,
         UpdatedAtUtc = job.UpdatedAtUtc,
         LastRunAtUtc = job.LastRunAtUtc,
-        NextRunAtUtc = !job.Enabled
-            ? null
-            : job.LastRunAtUtc is null ? nowUtc : job.LastRunAtUtc + job.PollingInterval,
+        NextRunAtUtc = ComputeNextRunAtUtc(job, nowUtc),
         ActiveReleaseCount = activeReleaseCount
     };
 }

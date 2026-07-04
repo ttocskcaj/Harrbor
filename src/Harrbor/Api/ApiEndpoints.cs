@@ -1,5 +1,7 @@
 using Harrbor.Api.Connections;
+using Harrbor.Api.Dashboard;
 using Harrbor.Api.Jobs;
+using Harrbor.Api.Releases;
 
 namespace Harrbor.Api;
 
@@ -13,6 +15,8 @@ public static class ApiEndpoints
     {
         app.MapConnectionEndpoints();
         app.MapJobEndpoints();
+        app.MapReleaseEndpoints();
+        app.MapDashboardEndpoints();
         return app;
     }
 }

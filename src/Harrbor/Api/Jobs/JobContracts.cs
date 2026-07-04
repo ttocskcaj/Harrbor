@@ -47,3 +47,9 @@ public class JobDeleteConflictResponse
     public int ActiveReleaseCount { get; set; }
     public string Message { get; set; } = string.Empty;
 }
+
+public class CloneJobRequest
+{
+    /// <summary>Name for the clone; if omitted, a unique "{source}-copy" name is generated.</summary>
+    public string? Name { get; set; }
+}

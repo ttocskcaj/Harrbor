@@ -13,6 +13,7 @@ public static class JobEndpoints
         group.MapGet("/", GetJobsAsync);
         group.MapGet("/{id:int}", GetJobAsync);
         group.MapPost("/", CreateJobAsync);
+        group.MapPost("/{id:int}/clone", CloneJobAsync);
         group.MapPut("/{id:int}", UpdateJobAsync);
         group.MapDelete("/{id:int}", DeleteJobAsync);
 
@@ -67,6 +68,66 @@ public static class JobEndpoints
         await db.SaveChangesAsync(cancellationToken);
 
         return Results.Created($"/api/jobs/{job.Id}", JobMapping.ToResponse(job, 0, now));
+    }
+
+    private static async Task<IResult> CloneJobAsync(
+        int id,
+        CloneJobRequest? request,
+        HarrborDbContext db,
+        CancellationToken cancellationToken)
+    {
+        var source = await db.Jobs.AsNoTracking().FirstOrDefaultAsync(j => j.Id == id, cancellationToken);
+        if (source is null)
+            return Results.NotFound();
+
+        var now = DateTime.UtcNow;
+        string name;
+
+        var requested = request?.Name?.Trim();
+        if (!string.IsNullOrEmpty(requested))
+        {
+            var errors = new ValidationErrors();
+            if (requested.Length > 100)
+                errors.Add("name", "Must be at most 100 characters.");
+            else if (await NameTakenAsync(db, requested, excludeId: null, cancellationToken))
+                errors.Add("name", $"A job named '{requested}' already exists.");
+
+            if (errors.HasErrors)
+                return Results.ValidationProblem(errors.Build());
+
+            name = requested;
+        }
+        else
+        {
+            name = await GenerateCloneNameAsync(db, source.Name, cancellationToken);
+        }
+
+        // Copy every setting but start disabled (so a half-tuned clone doesn't immediately
+        // start processing) and with no run history or releases.
+        var clone = new Job
+        {
+            Name = name,
+            Enabled = false,
+            ServiceType = source.ServiceType,
+            PollingInterval = source.PollingInterval,
+            RemotePath = source.RemotePath,
+            StagingPath = source.StagingPath,
+            QBittorrentCategory = source.QBittorrentCategory,
+            QBittorrentTags = [.. source.QBittorrentTags],
+            TransferParallelism = source.TransferParallelism,
+            MaxTransferRetries = source.MaxTransferRetries,
+            TransferRetryDelay = source.TransferRetryDelay,
+            CompletedCategory = source.CompletedCategory,
+            ImportTimeout = source.ImportTimeout,
+            CreatedAtUtc = now,
+            UpdatedAtUtc = now,
+            LastRunAtUtc = null
+        };
+
+        db.Jobs.Add(clone);
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Results.Created($"/api/jobs/{clone.Id}", JobMapping.ToResponse(clone, 0, now));
     }
 
     private static async Task<IResult> UpdateJobAsync(
@@ -140,6 +201,23 @@ public static class JobEndpoints
         return Results.NoContent();
     }
 
+    private static async Task<string> GenerateCloneNameAsync(HarrborDbContext db, string baseName, CancellationToken cancellationToken)
+    {
+        // "{base}-copy", then "-copy-2", "-copy-3", ... truncating the base to stay within 100 chars.
+        for (var i = 1; i <= 1000; i++)
+        {
+            var suffix = i == 1 ? "-copy" : $"-copy-{i}";
+            var candidate = Truncate(baseName, 100 - suffix.Length) + suffix;
+            if (!await NameTakenAsync(db, candidate, excludeId: null, cancellationToken))
+                return candidate;
+        }
+
+        return Truncate(baseName, 60) + "-copy-" + Guid.NewGuid().ToString("N")[..8];
+    }
+
+    private static string Truncate(string value, int maxLength)
+        => value.Length <= maxLength ? value : value[..maxLength];
+
     private static Task<bool> NameTakenAsync(HarrborDbContext db, string name, int? excludeId, CancellationToken cancellationToken)
     {
         var lowered = name.ToLower();
@@ -150,12 +228,12 @@ public static class JobEndpoints
 
     private static Task<int> CountActiveReleasesAsync(HarrborDbContext db, string jobName, CancellationToken cancellationToken)
         => db.TrackedReleases.CountAsync(
-            r => r.JobName == jobName && r.ArchivalStatus != ArchivalStatus.Completed,
+            r => r.JobName == jobName && r.Outcome == PipelineOutcome.Active,
             cancellationToken);
 
     private static Task<Dictionary<string, int>> GetActiveReleaseCountsAsync(HarrborDbContext db, CancellationToken cancellationToken)
         => db.TrackedReleases
-            .Where(r => r.ArchivalStatus != ArchivalStatus.Completed)
+            .Where(r => r.Outcome == PipelineOutcome.Active)
             .GroupBy(r => r.JobName)
             .Select(g => new { g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.Key, x => x.Count, cancellationToken);

@@ -30,7 +30,7 @@ public class ConnectionEndpointsTests : IDisposable
         var response = await _client.GetAsync("/api/connections");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var overview = await response.Content.ReadFromJsonAsync<List<ConnectionSummaryResponse>>();
+        var overview = await response.Content.ReadFromJsonAsync<List<ConnectionSummaryResponse>>(TestJson.Options);
         overview.Should().HaveCount(4);
         overview!.Select(c => c.Type).Should().BeEquivalentTo(
             "qbittorrent", "sonarr", "radarr", "remoteStorage");
@@ -204,7 +204,7 @@ public class ConnectionEndpointsTests : IDisposable
             BaseUrl = "http://qbt:8080"
         });
 
-        var overview = await _client.GetFromJsonAsync<List<ConnectionSummaryResponse>>("/api/connections");
+        var overview = await _client.GetFromJsonAsync<List<ConnectionSummaryResponse>>("/api/connections", TestJson.Options);
 
         overview!.Single(c => c.Type == "qbittorrent").Configured.Should().BeTrue();
         overview.Single(c => c.Type == "sonarr").Configured.Should().BeFalse();

@@ -32,6 +32,7 @@ public class ArchivalPhaseHandler : IArchivalPhaseHandler
     {
         var pendingArchival = await dbContext.TrackedReleases
             .Where(r => r.JobName == job.Name
+                && r.Outcome == PipelineOutcome.Active
                 && r.CleanupStatus == CleanupStatus.Completed
                 && r.ArchivalStatus == ArchivalStatus.Pending)
             .ToListAsync(cancellationToken);
@@ -71,10 +72,13 @@ public class ArchivalPhaseHandler : IArchivalPhaseHandler
 
                 release.ArchivalStatus = ArchivalStatus.Completed;
                 release.ArchivedAtUtc = DateTime.UtcNow;
+                // Reached the end of the pipeline.
+                release.Outcome = PipelineOutcome.Completed;
             }
             catch (Exception ex)
             {
                 release.ArchivalStatus = ArchivalStatus.Failed;
+                release.Outcome = PipelineOutcome.Failed;
                 release.ErrorCount++;
                 release.LastError = ex.Message;
                 release.LastErrorAtUtc = DateTime.UtcNow;

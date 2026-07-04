@@ -197,4 +197,49 @@ public class RcloneRemoteStorageServiceTests
         // Assert
         result.Should().Be(expected);
     }
+
+    [Fact]
+    public void TryParseProgress_FullLine_ParsesAllFields()
+    {
+        var ok = RcloneRemoteStorageService.TryParseProgress(
+            "Transferred: 512 MiB / 1 GiB, 50%, 25.000 MiB/s, ETA 20s", out var progress);
+
+        ok.Should().BeTrue();
+        progress.BytesTransferred.Should().Be(536870912L);       // 512 * 1024^2
+        progress.TotalBytes.Should().Be(1073741824L);            // 1 * 1024^3
+        progress.Percent.Should().Be(50);
+        progress.SpeedBytesPerSec.Should().Be(26214400L);        // 25 * 1024^2
+        progress.EtaSeconds.Should().Be(20);
+    }
+
+    [Theory]
+    [InlineData("Transferred: 1 GiB / 2 GiB, 50%, 10 MiB/s, ETA 1m30s", 90)]
+    [InlineData("Transferred: 1 GiB / 2 GiB, 50%, 10 MiB/s, ETA 1h2m3s", 3723)]
+    public void TryParseProgress_ParsesEtaFormats(string line, int expectedSeconds)
+    {
+        RcloneRemoteStorageService.TryParseProgress(line, out var progress).Should().BeTrue();
+        progress.EtaSeconds.Should().Be(expectedSeconds);
+    }
+
+    [Fact]
+    public void TryParseProgress_NoEta_ReturnsNullEta()
+    {
+        RcloneRemoteStorageService.TryParseProgress(
+            "Transferred: 512 MiB / 1 GiB, 50%, 25.000 MiB/s", out var progress).Should().BeTrue();
+        progress.EtaSeconds.Should().BeNull();
+    }
+
+    [Fact]
+    public void TryParseProgress_EtaDash_ReturnsNullEta()
+    {
+        RcloneRemoteStorageService.TryParseProgress(
+            "Transferred: 0 B / 1 GiB, 0%, 0 B/s, ETA -", out var progress).Should().BeTrue();
+        progress.EtaSeconds.Should().BeNull();
+    }
+
+    [Fact]
+    public void TryParseProgress_NonProgressLine_ReturnsFalse()
+    {
+        RcloneRemoteStorageService.TryParseProgress("Some random log line", out _).Should().BeFalse();
+    }
 }

@@ -13,13 +13,16 @@ public interface ITransferPhaseHandler : IPhaseHandler
 public class TransferPhaseHandler : ITransferPhaseHandler
 {
     private readonly IRemoteStorageService _remoteStorageService;
+    private readonly ITransferProgressTracker _progressTracker;
     private readonly ILogger<TransferPhaseHandler> _logger;
 
     public TransferPhaseHandler(
         IRemoteStorageService remoteStorageService,
+        ITransferProgressTracker progressTracker,
         ILogger<TransferPhaseHandler> logger)
     {
         _remoteStorageService = remoteStorageService;
+        _progressTracker = progressTracker;
         _logger = logger;
     }
 
@@ -50,6 +53,7 @@ public class TransferPhaseHandler : ITransferPhaseHandler
         // 2. Failed transfers eligible for retry (under retry limit, cooldown elapsed)
         var pendingTransfers = await dbContext.TrackedReleases
             .Where(r => r.JobName == job.Name
+                && r.Outcome == PipelineOutcome.Active
                 && r.DownloadStatus == DownloadStatus.Completed
                 && r.TransferStatus == TransferStatus.Pending)
             .OrderBy(r => r.CreatedAtUtc)
@@ -63,6 +67,7 @@ public class TransferPhaseHandler : ITransferPhaseHandler
         {
             var retryableTransfers = await dbContext.TrackedReleases
                 .Where(r => r.JobName == job.Name
+                    && r.Outcome == PipelineOutcome.Active
                     && r.DownloadStatus == DownloadStatus.Completed
                     && r.TransferStatus == TransferStatus.Failed
                     && r.ErrorCount < job.MaxTransferRetries
@@ -112,6 +117,7 @@ public class TransferPhaseHandler : ITransferPhaseHandler
                 release.ErrorCount = job.MaxTransferRetries;
                 release.LastError = "Remote source no longer exists";
                 release.LastErrorAtUtc = DateTime.UtcNow;
+                release.Outcome = PipelineOutcome.Failed;
                 await dbContext.SaveChangesAsync(cancellationToken);
 
                 _logger.LogWarning(
@@ -137,11 +143,17 @@ public class TransferPhaseHandler : ITransferPhaseHandler
             job.Name, release.Name, release.RemotePath, destinationPath,
             isRetry ? $" (attempt {attemptNumber}/{job.MaxTransferRetries})" : "");
 
+        // Report live progress (%, speed, ETA) into the in-memory tracker for the UI.
+        var releaseId = release.Id;
+        var progress = new SynchronousProgress<RcloneProgress>(sample =>
+            _progressTracker.Update(releaseId, ToSnapshot(sample)));
+
         try
         {
             var result = await remoteStorageService.TransferAsync(
                 release.RemotePath,
                 destinationPath,
+                progress,
                 cancellationToken);
 
             if (result.Success)
@@ -165,6 +177,8 @@ public class TransferPhaseHandler : ITransferPhaseHandler
                 release.LastErrorAtUtc = DateTime.UtcNow;
 
                 var isPermanentlyFailed = release.ErrorCount >= job.MaxTransferRetries;
+                if (isPermanentlyFailed)
+                    release.Outcome = PipelineOutcome.Failed;
 
                 _logger.LogError(
                     "Job '{JobName}': Transfer failed for '{ReleaseName}': {Error} (attempt {Attempt}/{MaxAttempts}){PermanentStatus}",
@@ -180,15 +194,30 @@ public class TransferPhaseHandler : ITransferPhaseHandler
             release.LastErrorAtUtc = DateTime.UtcNow;
 
             var isPermanentlyFailed = release.ErrorCount >= job.MaxTransferRetries;
+            if (isPermanentlyFailed)
+                release.Outcome = PipelineOutcome.Failed;
 
             _logger.LogError(ex,
                 "Job '{JobName}': Transfer failed with exception for '{ReleaseName}' (attempt {Attempt}/{MaxAttempts}){PermanentStatus}",
                 job.Name, release.Name, attemptNumber, job.MaxTransferRetries,
                 isPermanentlyFailed ? " - permanently failed" : " - will retry");
         }
+        finally
+        {
+            // The transfer has ended (succeeded or failed) — drop its live progress entry.
+            _progressTracker.Clear(releaseId);
+        }
 
         await dbContext.SaveChangesAsync(cancellationToken);
     }
+
+    private static TransferProgressSnapshot ToSnapshot(RcloneProgress sample) => new(
+        Progress: Math.Clamp(sample.Percent / 100.0, 0, 1),
+        SpeedBytesPerSec: sample.SpeedBytesPerSec,
+        BytesTransferred: sample.BytesTransferred,
+        TotalBytes: sample.TotalBytes,
+        EtaSeconds: sample.EtaSeconds,
+        UpdatedAtUtc: DateTime.UtcNow);
 
     private static string FormatSize(long bytes)
     {

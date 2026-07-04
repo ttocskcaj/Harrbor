@@ -122,6 +122,7 @@ public partial class RcloneRemoteStorageService : IRemoteStorageService, IDispos
     public async Task<TransferResult> TransferAsync(
         string sourcePath,
         string destinationPath,
+        IProgress<RcloneProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
@@ -183,6 +184,9 @@ public partial class RcloneRemoteStorageService : IRemoteStorageService, IDispos
                 if (e.Data.Contains("Transferred:"))
                 {
                     _logger.LogDebug("rclone progress: {Line}", e.Data);
+                    // IProgress.Report is safe to call from this background stderr thread.
+                    if (progress is not null && TryParseProgress(e.Data, out var sample))
+                        progress.Report(sample);
                 }
                 else
                 {
@@ -339,6 +343,50 @@ public partial class RcloneRemoteStorageService : IRemoteStorageService, IDispos
         return 0;
     }
 
+    /// <summary>
+    /// Parses a full rclone one-line stats sample, e.g.
+    /// "Transferred: 512 MiB / 1 GiB, 50%, 25 MiB/s, ETA 20s".
+    /// </summary>
+    internal static bool TryParseProgress(string line, out RcloneProgress progress)
+    {
+        progress = default!;
+        var match = ProgressRegex().Match(line);
+        if (!match.Success)
+            return false;
+
+        var transferred = ToBytes(double.Parse(match.Groups[1].Value), match.Groups[2].Value);
+        var total = ToBytes(double.Parse(match.Groups[3].Value), match.Groups[4].Value);
+        var percent = double.Parse(match.Groups[5].Value);
+        var speed = ToBytes(double.Parse(match.Groups[6].Value), match.Groups[7].Value);
+        var eta = match.Groups[8].Success ? ParseEta(match.Groups[8].Value) : null;
+
+        progress = new RcloneProgress(transferred, total, percent, speed, eta);
+        return true;
+    }
+
+    private static long ToBytes(double value, string unit) => unit.ToUpperInvariant() switch
+    {
+        "B" or "BYTES" => (long)value,
+        "KIB" or "KB" => (long)(value * 1024),
+        "MIB" or "MB" => (long)(value * 1024 * 1024),
+        "GIB" or "GB" => (long)(value * 1024 * 1024 * 1024),
+        "TIB" or "TB" => (long)(value * 1024L * 1024 * 1024 * 1024),
+        _ => (long)value
+    };
+
+    private static int? ParseEta(string eta)
+    {
+        if (string.IsNullOrEmpty(eta) || eta == "-")
+            return null;
+
+        var match = EtaRegex().Match(eta);
+        if (!match.Success || !match.Groups.Cast<Group>().Skip(1).Any(g => g.Success))
+            return null;
+
+        int Part(int group) => match.Groups[group].Success ? int.Parse(match.Groups[group].Value) : 0;
+        return Part(1) * 86400 + Part(2) * 3600 + Part(3) * 60 + Part(4);
+    }
+
     internal static string RedactSensitiveArgs(string args)
     {
         // Redact pass= and key_file_pass= values from rclone connection strings
@@ -350,4 +398,10 @@ public partial class RcloneRemoteStorageService : IRemoteStorageService, IDispos
 
     [GeneratedRegex(@"Transferred:\s+([\d.]+)\s+(\w+)\s+/")]
     private static partial Regex BytesTransferredRegex();
+
+    [GeneratedRegex(@"Transferred:\s+([\d.]+)\s*(\w+)\s*/\s*([\d.]+)\s*(\w+),\s*(\d+)%,\s*([\d.]+)\s*(\w+)/s(?:,\s*ETA\s+(\S+))?")]
+    private static partial Regex ProgressRegex();
+
+    [GeneratedRegex(@"^(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$")]
+    private static partial Regex EtaRegex();
 }

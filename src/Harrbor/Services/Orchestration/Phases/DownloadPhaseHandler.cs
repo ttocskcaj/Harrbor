@@ -31,7 +31,9 @@ public class DownloadPhaseHandler : IDownloadPhaseHandler
     public async Task ExecuteAsync(JobDefinition job, HarrborDbContext dbContext, IQBittorrentClient qBittorrentClient, CancellationToken cancellationToken)
     {
         var pendingDownloads = await dbContext.TrackedReleases
-            .Where(r => r.JobName == job.Name && r.DownloadStatus == DownloadStatus.Pending)
+            .Where(r => r.JobName == job.Name
+                && r.Outcome == PipelineOutcome.Active
+                && r.DownloadStatus == DownloadStatus.Pending)
             .ToListAsync(cancellationToken);
 
         if (pendingDownloads.Count == 0)

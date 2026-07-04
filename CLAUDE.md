@@ -80,5 +80,5 @@ Only bootstrap config stays file-based (`appsettings.default.json`): `Serilog` a
 ## Health Checks
 
 - `/health` - All checks
-- `/health/ready` - Database + external services
+- `/health/ready` - App status + Database
 - `/health/live` - Basic liveness (app running)

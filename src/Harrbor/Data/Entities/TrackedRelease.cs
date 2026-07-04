@@ -61,6 +61,14 @@ public class TrackedRelease
     public ArchivalStatus ArchivalStatus { get; set; } = ArchivalStatus.Pending;
 
     /// <summary>
+    /// Terminal outcome of the release. <see cref="PipelineOutcome.Active"/> while it is
+    /// still moving through (or waiting in) the pipeline; the phase handlers only process
+    /// releases whose outcome is Active. Set to a terminal value when the release finishes,
+    /// permanently fails, or is cancelled by the operator.
+    /// </summary>
+    public PipelineOutcome Outcome { get; set; } = PipelineOutcome.Active;
+
+    /// <summary>
     /// Number of errors/retries encountered.
     /// </summary>
     public int ErrorCount { get; set; }
@@ -159,4 +167,23 @@ public enum ArchivalStatus
     Pending,
     Completed,
     Failed
+}
+
+/// <summary>
+/// Terminal outcome of a release, used to partition active pipeline work from history
+/// and to make cancellation/permanent failure durable.
+/// </summary>
+public enum PipelineOutcome
+{
+    /// <summary>Still moving through, or waiting in, the pipeline.</summary>
+    Active = 0,
+
+    /// <summary>Reached the end of the pipeline (archived).</summary>
+    Completed = 1,
+
+    /// <summary>Permanently failed (retries exhausted or an unrecoverable phase failure).</summary>
+    Failed = 2,
+
+    /// <summary>Cancelled by the operator.</summary>
+    Cancelled = 3
 }

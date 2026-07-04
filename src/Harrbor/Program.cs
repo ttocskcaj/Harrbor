@@ -10,6 +10,7 @@ using Harrbor.Data.Entities;
 using Harrbor.Services;
 using Harrbor.Services.Clients;
 using Harrbor.Services.Configuration;
+using Harrbor.Services.Health;
 using Harrbor.Services.Orchestration;
 using Harrbor.Services.RemoteStorage;
 using Harrbor.Services.Orchestration.Phases;
@@ -54,6 +55,7 @@ try
 
     // Services
     builder.Services.AddSingleton<IConnectionStore, ConnectionStore>();
+    builder.Services.AddSingleton<ITransferProgressTracker, TransferProgressTracker>();
     builder.Services.AddSingleton<IQBittorrentClient, QBittorrentClientWrapper>();
     builder.Services.AddScoped<IRemoteStorageService, RcloneRemoteStorageService>();
     builder.Services.AddScoped<IMediaServiceResolver, MediaServiceResolver>();
@@ -77,10 +79,18 @@ try
     builder.Services.TryAddSingleton(TimeProvider.System);
     builder.Services.AddHostedService<OrchestrationWorker>();
 
+    // Connection health monitor (one instance shared between the hosted service and the API)
+    builder.Services.AddSingleton<ConnectionHealthMonitor>();
+    builder.Services.AddSingleton<IConnectionHealthMonitor>(sp => sp.GetRequiredService<ConnectionHealthMonitor>());
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<ConnectionHealthMonitor>());
+
     // API
     builder.Services.AddProblemDetails();
     builder.Services.ConfigureHttpJsonOptions(options =>
         options.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));
+
+    // OpenAPI document at /openapi/v1.json for the React client to codegen a typed client
+    builder.Services.AddOpenApi();
 
     // Health Checks
     builder.Services.AddHealthChecks()
@@ -126,6 +136,9 @@ try
 
     // Configuration API
     app.MapApiEndpoints();
+
+    // OpenAPI document (served in all environments; single-user trusted-network tool)
+    app.MapOpenApi();
 
     // Health check endpoints
     app.MapHealthChecks("/health");

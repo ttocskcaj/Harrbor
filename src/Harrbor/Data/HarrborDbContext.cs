@@ -26,6 +26,7 @@ public class HarrborDbContext : DbContext
             entity.HasIndex(e => e.TransferStatus);
             entity.HasIndex(e => e.ImportStatus);
             entity.HasIndex(e => e.JobName);
+            entity.HasIndex(e => e.Outcome);
 
             entity.Property(e => e.DownloadId).HasMaxLength(40).IsRequired();
             entity.Property(e => e.Name).HasMaxLength(500).IsRequired();

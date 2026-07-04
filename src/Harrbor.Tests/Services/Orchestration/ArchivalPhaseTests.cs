@@ -59,6 +59,7 @@ public class ArchivalPhaseTests
         var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
         updatedRelease.ArchivalStatus.Should().Be(ArchivalStatus.Completed);
         updatedRelease.ArchivedAtUtc.Should().NotBeNull();
+        updatedRelease.Outcome.Should().Be(PipelineOutcome.Completed);
 
         A.CallTo(() => _qBittorrentClient.EnsureCategoryExistsAsync("completed", A<CancellationToken>._))
             .MustHaveHappenedOnceExactly();
@@ -128,9 +129,44 @@ public class ArchivalPhaseTests
         // Assert
         var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
         updatedRelease.ArchivalStatus.Should().Be(ArchivalStatus.Failed);
+        updatedRelease.Outcome.Should().Be(PipelineOutcome.Failed);
         updatedRelease.ErrorCount.Should().Be(1);
         updatedRelease.LastError.Should().Be("Torrent not found");
         updatedRelease.LastErrorAtUtc.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task ProcessArchival_NonActiveOutcome_IsSkipped()
+    {
+        // Arrange - a release that is ready for archival by phase status but already
+        // has a terminal outcome (e.g. cancelled) must not be processed.
+        using var dbContext = TestDbContextFactory.Create();
+        var release = new TrackedReleaseBuilder()
+            .WithDownloadId("CANCELLED1")
+            .WithJobName("test-job")
+            .WithCleanupStatus(CleanupStatus.Completed)
+            .WithArchivalStatus(ArchivalStatus.Pending)
+            .WithOutcome(PipelineOutcome.Cancelled)
+            .Build();
+        dbContext.TrackedReleases.Add(release);
+        await dbContext.SaveChangesAsync();
+
+        var job = new JobDefinitionBuilder()
+            .WithName("test-job")
+            .WithCompletedCategory("completed")
+            .Build();
+
+        var handler = CreateHandler();
+
+        // Act
+        await handler.ExecuteAsync(job, dbContext, _qBittorrentClient, CancellationToken.None);
+
+        // Assert
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        updatedRelease.ArchivalStatus.Should().Be(ArchivalStatus.Pending);
+        updatedRelease.Outcome.Should().Be(PipelineOutcome.Cancelled);
+        A.CallTo(() => _qBittorrentClient.SetCategoryAsync(A<string>._, A<string>._, A<CancellationToken>._))
+            .MustNotHaveHappened();
     }
 
     [Fact]

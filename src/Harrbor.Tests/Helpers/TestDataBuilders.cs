@@ -17,6 +17,7 @@ public class TrackedReleaseBuilder
     private ImportStatus _importStatus = ImportStatus.Pending;
     private CleanupStatus _cleanupStatus = CleanupStatus.Pending;
     private ArchivalStatus _archivalStatus = ArchivalStatus.Pending;
+    private PipelineOutcome _outcome = PipelineOutcome.Active;
     private int _errorCount;
     private string? _lastError;
     private DateTime? _lastErrorAtUtc;
@@ -91,6 +92,12 @@ public class TrackedReleaseBuilder
     public TrackedReleaseBuilder WithArchivalStatus(ArchivalStatus status)
     {
         _archivalStatus = status;
+        return this;
+    }
+
+    public TrackedReleaseBuilder WithOutcome(PipelineOutcome outcome)
+    {
+        _outcome = outcome;
         return this;
     }
 
@@ -169,6 +176,7 @@ public class TrackedReleaseBuilder
             ImportStatus = _importStatus,
             CleanupStatus = _cleanupStatus,
             ArchivalStatus = _archivalStatus,
+            Outcome = _outcome,
             ErrorCount = _errorCount,
             LastError = _lastError,
             LastErrorAtUtc = _lastErrorAtUtc,

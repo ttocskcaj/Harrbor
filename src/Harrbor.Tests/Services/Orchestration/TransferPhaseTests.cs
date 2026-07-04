@@ -28,7 +28,7 @@ public class TransferPhaseTests
 
     private TransferPhaseHandler CreateHandler()
     {
-        return new TransferPhaseHandler(_remoteStorageService, _logger);
+        return new TransferPhaseHandler(_remoteStorageService, new TransferProgressTracker(), _logger);
     }
 
     [Fact]
@@ -71,7 +71,7 @@ public class TransferPhaseTests
         await handler.ExecuteAsync(job, dbContext, _remoteStorageService, CancellationToken.None);
 
         // Assert - transfer should not have been called
-        A.CallTo(() => _remoteStorageService.TransferAsync(A<string>._, A<string>._, A<CancellationToken>._))
+        A.CallTo(() => _remoteStorageService.TransferAsync(A<string>._, A<string>._, A<IProgress<RcloneProgress>?>._, A<CancellationToken>._))
             .MustNotHaveHappened();
     }
 
@@ -92,7 +92,7 @@ public class TransferPhaseTests
         await dbContext.SaveChangesAsync();
 
         A.CallTo(() => _remoteStorageService.TransferAsync(
-            A<string>._, A<string>._, A<CancellationToken>._))
+            A<string>._, A<string>._, A<IProgress<RcloneProgress>?>._, A<CancellationToken>._))
             .Returns(new TransferResult(Success: true, BytesTransferred: 1024));
 
         var job = new JobDefinitionBuilder()
@@ -109,7 +109,7 @@ public class TransferPhaseTests
         var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
         updatedRelease.TransferStatus.Should().Be(TransferStatus.Completed);
         A.CallTo(() => _remoteStorageService.TransferAsync(
-            A<string>._, A<string>._, A<CancellationToken>._))
+            A<string>._, A<string>._, A<IProgress<RcloneProgress>?>._, A<CancellationToken>._))
             .MustHaveHappenedOnceExactly();
     }
 
@@ -136,7 +136,7 @@ public class TransferPhaseTests
         A.CallTo(() => _remoteStorageService.ExistsAsync(A<string>._, A<CancellationToken>._))
             .Returns(true);
         A.CallTo(() => _remoteStorageService.TransferAsync(
-            A<string>._, A<string>._, A<CancellationToken>._))
+            A<string>._, A<string>._, A<IProgress<RcloneProgress>?>._, A<CancellationToken>._))
             .Returns(new TransferResult(Success: true, BytesTransferred: 1024));
 
         var job = new JobDefinitionBuilder()
@@ -187,7 +187,7 @@ public class TransferPhaseTests
         var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
         updatedRelease.TransferStatus.Should().Be(TransferStatus.Failed);
         A.CallTo(() => _remoteStorageService.TransferAsync(
-            A<string>._, A<string>._, A<CancellationToken>._))
+            A<string>._, A<string>._, A<IProgress<RcloneProgress>?>._, A<CancellationToken>._))
             .MustNotHaveHappened();
     }
 
@@ -211,7 +211,7 @@ public class TransferPhaseTests
         await dbContext.SaveChangesAsync();
 
         A.CallTo(() => _remoteStorageService.TransferAsync(
-            A<string>._, A<string>._, A<CancellationToken>._))
+            A<string>._, A<string>._, A<IProgress<RcloneProgress>?>._, A<CancellationToken>._))
             .Returns(new TransferResult(Success: true, BytesTransferred: 1024));
 
         var job = new JobDefinitionBuilder()
@@ -248,7 +248,7 @@ public class TransferPhaseTests
         await dbContext.SaveChangesAsync();
 
         A.CallTo(() => _remoteStorageService.TransferAsync(
-            A<string>._, A<string>._, A<CancellationToken>._))
+            A<string>._, A<string>._, A<IProgress<RcloneProgress>?>._, A<CancellationToken>._))
             .Returns(new TransferResult(Success: false, Error: "Connection failed"));
 
         var job = new JobDefinitionBuilder()
@@ -266,6 +266,81 @@ public class TransferPhaseTests
         updatedRelease.ErrorCount.Should().Be(1);
         updatedRelease.LastError.Should().Be("Connection failed");
         updatedRelease.LastErrorAtUtc.Should().NotBeNull();
+        // Below the retry limit, the release stays Active so the next tick retries it.
+        updatedRelease.Outcome.Should().Be(PipelineOutcome.Active);
+    }
+
+    [Fact]
+    public async Task TransferRelease_FailureAtMaxRetries_MarksOutcomeFailed()
+    {
+        // Arrange
+        using var dbContext = TestDbContextFactory.Create();
+        var release = new TrackedReleaseBuilder()
+            .WithDownloadId("TEST1")
+            .WithJobName("test-job")
+            .WithDownloadStatus(DownloadStatus.Completed)
+            .WithTransferStatus(TransferStatus.Pending)
+            .WithErrorCount(0)
+            .WithRemotePath("/downloads/release1")
+            .WithStagingPath("/staging")
+            .Build();
+        dbContext.TrackedReleases.Add(release);
+        await dbContext.SaveChangesAsync();
+
+        A.CallTo(() => _remoteStorageService.TransferAsync(
+            A<string>._, A<string>._, A<IProgress<RcloneProgress>?>._, A<CancellationToken>._))
+            .Returns(new TransferResult(Success: false, Error: "Connection failed"));
+
+        var job = new JobDefinitionBuilder()
+            .WithName("test-job")
+            .WithMaxTransferRetries(1) // A single failure exhausts retries
+            .Build();
+
+        var handler = CreateHandler();
+
+        // Act
+        await handler.ExecuteAsync(job, dbContext, _remoteStorageService, CancellationToken.None);
+
+        // Assert
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        updatedRelease.TransferStatus.Should().Be(TransferStatus.Failed);
+        updatedRelease.ErrorCount.Should().Be(1);
+        updatedRelease.Outcome.Should().Be(PipelineOutcome.Failed);
+    }
+
+    [Fact]
+    public async Task ProcessTransfers_NonActiveOutcome_IsSkipped()
+    {
+        // Arrange - a cancelled release ready for transfer by phase status must be ignored.
+        using var dbContext = TestDbContextFactory.Create();
+        var release = new TrackedReleaseBuilder()
+            .WithDownloadId("CANCELLED1")
+            .WithJobName("test-job")
+            .WithDownloadStatus(DownloadStatus.Completed)
+            .WithTransferStatus(TransferStatus.Pending)
+            .WithOutcome(PipelineOutcome.Cancelled)
+            .WithRemotePath("/downloads/release1")
+            .WithStagingPath("/staging")
+            .Build();
+        dbContext.TrackedReleases.Add(release);
+        await dbContext.SaveChangesAsync();
+
+        var job = new JobDefinitionBuilder()
+            .WithName("test-job")
+            .WithTransferParallelism(2)
+            .Build();
+
+        var handler = CreateHandler();
+
+        // Act
+        await handler.ExecuteAsync(job, dbContext, _remoteStorageService, CancellationToken.None);
+
+        // Assert
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        updatedRelease.TransferStatus.Should().Be(TransferStatus.Pending);
+        A.CallTo(() => _remoteStorageService.TransferAsync(
+            A<string>._, A<string>._, A<IProgress<RcloneProgress>?>._, A<CancellationToken>._))
+            .MustNotHaveHappened();
     }
 
     [Fact]
@@ -299,7 +374,7 @@ public class TransferPhaseTests
         var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
         updatedRelease.TransferStatus.Should().Be(TransferStatus.Failed); // Unchanged
         A.CallTo(() => _remoteStorageService.TransferAsync(
-            A<string>._, A<string>._, A<CancellationToken>._))
+            A<string>._, A<string>._, A<IProgress<RcloneProgress>?>._, A<CancellationToken>._))
             .MustNotHaveHappened();
     }
 }

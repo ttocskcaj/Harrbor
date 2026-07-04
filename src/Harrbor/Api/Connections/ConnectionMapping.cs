@@ -96,6 +96,7 @@ public static class ConnectionMapping
         BaseUrl = stamped.Settings.BaseUrl,
         Username = stamped.Settings.Username,
         PasswordSet = !string.IsNullOrEmpty(stamped.Settings.Password),
+        Version = stamped.Version,
         UpdatedAtUtc = stamped.UpdatedAtUtc
     };
 
@@ -105,6 +106,7 @@ public static class ConnectionMapping
         BaseUrl = stamped.Settings.BaseUrl,
         ApiKeySet = !string.IsNullOrEmpty(stamped.Settings.ApiKey),
         Enabled = stamped.Settings.Enabled,
+        Version = stamped.Version,
         UpdatedAtUtc = stamped.UpdatedAtUtc
     };
 
@@ -120,6 +122,7 @@ public static class ConnectionMapping
         Transfers = stamped.Settings.Transfers,
         Checkers = stamped.Settings.Checkers,
         AdditionalFlags = [.. stamped.Settings.AdditionalFlags],
+        Version = stamped.Version,
         UpdatedAtUtc = stamped.UpdatedAtUtc
     };
 

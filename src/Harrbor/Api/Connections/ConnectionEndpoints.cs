@@ -2,6 +2,7 @@ using Harrbor.Configuration.Connections;
 using Harrbor.Data;
 using Harrbor.Services.Clients;
 using Harrbor.Services.Configuration;
+using Harrbor.Services.Health;
 using Harrbor.Services.RemoteStorage;
 using Microsoft.EntityFrameworkCore;
 
@@ -18,10 +19,12 @@ public static class ConnectionEndpoints
         var group = app.MapGroup("/api/connections");
 
         group.MapGet("/", GetOverviewAsync);
+        group.MapGet("/health", GetHealthAsync);
 
         group.MapGet("/qbittorrent", GetQBittorrentAsync);
         group.MapPut("/qbittorrent", PutQBittorrentAsync);
         group.MapPost("/qbittorrent/test", TestQBittorrentAsync);
+        group.MapGet("/qbittorrent/categories", GetQBittorrentCategoriesAsync);
 
         group.MapGet("/sonarr", GetServarrAsync<SonarrSettings>);
         group.MapPut("/sonarr", PutServarrAsync<SonarrSettings>);
@@ -79,6 +82,9 @@ public static class ConnectionEndpoints
             return Results.ValidationProblem(errors.Build());
 
         var stored = await store.GetAsync<QBittorrentSettings>(cancellationToken);
+        if (VersionConflict(request.ExpectedVersion, stored?.Version) is { } conflict)
+            return conflict;
+
         var merged = ConnectionMapping.Merge(request, stored?.Settings);
         var saved = await store.SaveAsync(merged, cancellationToken);
         return Results.Ok(ConnectionMapping.ToResponse(saved));
@@ -129,6 +135,9 @@ public static class ConnectionEndpoints
         var errors = ConnectionMapping.Validate(request, hasStoredApiKey: !string.IsNullOrEmpty(stored?.Settings.ApiKey));
         if (errors.HasErrors)
             return Results.ValidationProblem(errors.Build());
+
+        if (VersionConflict(request.ExpectedVersion, stored?.Version) is { } conflict)
+            return conflict;
 
         var merged = ConnectionMapping.MergeServarr<T>(request, stored?.Settings);
         var saved = await store.SaveAsync(merged, cancellationToken);
@@ -181,6 +190,9 @@ public static class ConnectionEndpoints
             return Results.ValidationProblem(errors.Build());
 
         var stored = await store.GetAsync<RemoteStorageSettings>(cancellationToken);
+        if (VersionConflict(request.ExpectedVersion, stored?.Version) is { } conflict)
+            return conflict;
+
         var merged = ConnectionMapping.Merge(request, stored?.Settings);
         var saved = await store.SaveAsync(merged, cancellationToken);
         return Results.Ok(ConnectionMapping.ToResponse(saved));
@@ -211,9 +223,38 @@ public static class ConnectionEndpoints
         }, cancellationToken);
     }
 
-    // ----- Overview -----
+    private static async Task<IResult> GetQBittorrentCategoriesAsync(
+        IQBittorrentClient client,
+        CancellationToken cancellationToken)
+    {
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(TestTimeout);
 
-    private static async Task<IResult> GetOverviewAsync(HarrborDbContext db, CancellationToken cancellationToken)
+        try
+        {
+            var categories = await client.GetCategoriesAsync(cts.Token);
+            return Results.Ok(categories);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return Results.Problem(
+                detail: "Timed out contacting qBittorrent.",
+                statusCode: StatusCodes.Status504GatewayTimeout);
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem(
+                detail: $"Could not load categories from qBittorrent: {ex.Message}",
+                statusCode: StatusCodes.Status502BadGateway);
+        }
+    }
+
+    // ----- Overview & health -----
+
+    private static async Task<IResult> GetOverviewAsync(
+        HarrborDbContext db,
+        IConnectionHealthMonitor healthMonitor,
+        CancellationToken cancellationToken)
     {
         var rows = await db.ServiceConnections.AsNoTracking().ToListAsync(cancellationToken);
 
@@ -221,15 +262,44 @@ public static class ConnectionEndpoints
             .Select(type =>
             {
                 var row = rows.FirstOrDefault(r => r.Type == type);
+                var health = healthMonitor.GetState(type);
                 return new ConnectionSummaryResponse
                 {
                     Type = type,
                     Configured = row is not null,
-                    UpdatedAtUtc = row?.UpdatedAtUtc
+                    UpdatedAtUtc = row?.UpdatedAtUtc,
+                    Status = health.Status,
+                    CheckedAtUtc = health.CheckedAtUtc
                 };
             })
             .ToList();
 
         return Results.Ok(overview);
+    }
+
+    private static async Task<IResult> GetHealthAsync(
+        IConnectionStore store,
+        IConnectionHealthMonitor healthMonitor,
+        CancellationToken cancellationToken)
+    {
+        return Results.Ok(await ConnectionHealthReporting.BuildAsync(store, healthMonitor, cancellationToken));
+    }
+
+    /// <summary>
+    /// Optimistic-concurrency guard: if the caller supplied an expected version that no longer
+    /// matches the stored one, another edit won the race — reject with 412 rather than clobber it.
+    /// </summary>
+    private static IResult? VersionConflict(int? expectedVersion, int? storedVersion)
+    {
+        if (expectedVersion is int expected && storedVersion != expected)
+        {
+            return Results.Problem(
+                title: "Connection was modified",
+                detail: $"Expected version {expected} but the stored version is " +
+                        $"{(storedVersion?.ToString() ?? "none")}. Reload and try again.",
+                statusCode: StatusCodes.Status412PreconditionFailed);
+        }
+
+        return null;
     }
 }

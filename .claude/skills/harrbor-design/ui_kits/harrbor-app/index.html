@@ -1,0 +1,69 @@
+<!-- @dsCard group="Harrbor App" viewport="1360x820" name="Harrbor App" subtitle="Dashboard · Pipeline · Connections — interactive" -->
+<!-- @startingPoint section="Screens" subtitle="Full Harrbor app: dashboard, pipeline board, connection settings" viewport="1360x820" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harrbor</title>
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  html, body { margin: 0; height: 100%; background: var(--bg-page); }
+  * { box-sizing: border-box; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--slate-700); border-radius: 999px; border: 2px solid var(--bg-page); }
+  ::-webkit-scrollbar-track { background: transparent; }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+</head>
+<body>
+<div id="root"></div>
+    <script type="text/babel" src="AppShell.jsx"></script>
+<script type="text/babel" src="Dashboard.jsx"></script>
+<script type="text/babel" src="Pipeline.jsx"></script>
+<script type="text/babel" src="Settings.jsx"></script>
+<script type="text/babel" data-presets="react">
+  (() => {
+  const { Button, Badge } = window.HarrborDesignSystem_2a1653;
+
+  function App() {
+    const [screen, setScreen] = React.useState('dashboard');
+    const meta = {
+      dashboard: { title: 'Dashboard', subtitle: 'orchestrator · homelab-01' },
+      pipeline:  { title: 'Pipeline', subtitle: 'six-phase flow · live' },
+      jobs:      { title: 'Jobs', subtitle: 'parallel lanes' },
+      settings:  { title: 'Connections', subtitle: 'services · credentials' },
+    }[screen];
+
+    const right = (
+      <React.Fragment>
+        <Badge tone="accent" dot>Live</Badge>
+        <Button size="sm" variant="secondary" iconLeft="＋">Add job</Button>
+      </React.Fragment>
+    );
+
+    let body;
+    if (screen === 'dashboard') body = <window.Dashboard onNav={setScreen} />;
+    else if (screen === 'pipeline') body = <window.Pipeline />;
+    else if (screen === 'settings') body = <window.Settings />;
+    else body = (
+      <div style={{ display: 'grid', placeItems: 'center', height: '100%', color: 'var(--text-faint)', font: 'var(--text-sm) var(--font-mono)' }}>
+        jobs view — parallel lanes (tv-shows, movies)
+      </div>
+    );
+
+    return (
+      <window.AppShell current={screen} onNav={setScreen} title={meta.title} subtitle={meta.subtitle} topRight={right}>
+        {body}
+      </window.AppShell>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  })();
+</script>
+</body>
+</html>

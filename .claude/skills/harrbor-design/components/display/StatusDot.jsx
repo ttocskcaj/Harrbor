@@ -1,0 +1,28 @@
+import React from 'react';
+
+/**
+ * StatusDot — the connection/health atom. A filled dot with an
+ * optional soft halo and pulse for "live" states.
+ * status: ok | active | warn | error | idle
+ */
+export function StatusDot({ status = 'idle', pulse = false, size = 9, halo = true, style = {} }) {
+  const map = {
+    ok:     { c: 'var(--status-ok)',     g: 'var(--green-glow)' },
+    active: { c: 'var(--status-active)',  g: 'var(--accent-glow)' },
+    warn:   { c: 'var(--status-warn)',    g: 'var(--amber-glow)' },
+    error:  { c: 'var(--status-error)',   g: 'var(--red-glow)' },
+    idle:   { c: 'var(--status-idle)',    g: 'transparent' },
+  };
+  const s = map[status] || map.idle;
+  return (
+    <span
+      aria-label={status}
+      style={{
+        display: 'inline-block', width: size, height: size, flexShrink: 0,
+        borderRadius: '50%', background: s.c,
+        boxShadow: halo ? `0 0 0 3px ${s.g}` : 'none',
+        animation: pulse ? 'var(--pulse)' : 'none', ...style,
+      }}
+    />
+  );
+}

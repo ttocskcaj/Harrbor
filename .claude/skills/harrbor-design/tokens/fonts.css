@@ -1,0 +1,4 @@
+/* Harrbor webfonts — IBM Plex family (via Google Fonts CDN).
+   Plex Sans reads as engineered infrastructure UI; Plex Mono carries every
+   path, ID, hash and byte count. Substituted from CDN — see readme.md. */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600;700&display=swap');

@@ -1,0 +1,46 @@
+<!-- @dsCard group="Components" viewport="700x300" name="Display" subtitle="StatusDot, Badge, ProgressBar, MetricTile, PhaseChip, Card" -->
+<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../../styles.css">
+<style>body{margin:0;background:var(--bg-page);font-family:var(--font-sans);padding:22px;color:var(--text-body)}
+.wrap{display:flex;flex-direction:column;gap:18px;max-width:650px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.lab{font:var(--text-2xs) var(--font-sans);color:var(--text-faint);letter-spacing:var(--tracking-caps);text-transform:uppercase;margin-bottom:9px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script></head>
+<body><div id="root"></div>
+<script type="text/babel">
+const { StatusDot, Badge, ProgressBar, MetricTile, PhaseChip } = window.HarrborDesignSystem_2a1653;
+function Demo(){
+  return (<div className="wrap">
+    <div><div className="lab">StatusDot & Badge</div>
+      <div className="row">
+        <StatusDot status="ok" pulse/><StatusDot status="active" pulse/><StatusDot status="warn"/><StatusDot status="error"/><StatusDot status="idle"/>
+        <span style={{width:12}}/>
+        <Badge tone="ok" dot>Connected</Badge><Badge tone="accent" dot>Live</Badge><Badge tone="warn" dot>Stuck</Badge><Badge tone="error" dot>Failed</Badge><Badge tone="neutral" uppercase>x265</Badge>
+      </div>
+    </div>
+    <div><div className="lab">PhaseChip</div>
+      <div className="row">
+        <PhaseChip phase="discover" count={3}/><PhaseChip phase="download" count={7} active/><PhaseChip phase="transfer" count={2} active/><PhaseChip phase="import" count={4}/><PhaseChip phase="cleanup"/><PhaseChip phase="archival"/>
+      </div>
+    </div>
+    <div><div className="lab">ProgressBar</div>
+      <div style={{display:'grid',gap:12}}>
+        <ProgressBar value={72} striped tone="active" label="Transferring S04E11.mkv"/>
+        <ProgressBar value={38} tone="warn" label="Stalled"/>
+      </div>
+    </div>
+    <div><div className="lab">MetricTile</div>
+      <div className="g4">
+        <MetricTile label="In pipeline" value="1,284" accentBar tone="accent"/>
+        <MetricTile label="Transferring" value="12" unit="active" tone="accent"/>
+        <MetricTile label="Stuck" value="3" tone="warn" accentBar delta="+2"/>
+        <MetricTile label="Failed 24h" value="1" tone="error" accentBar/>
+      </div>
+    </div>
+  </div>);
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<Demo/>);
+</script></body></html>

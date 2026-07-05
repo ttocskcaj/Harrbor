@@ -1,0 +1,16 @@
+<!-- @dsCard group="Colors" viewport="700x150" name="Status vocabulary" subtitle="Colorblind-safe; always paired with icon + label, never color alone" -->
+<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../styles.css">
+<style>body{margin:0;background:var(--bg-page);font-family:var(--font-sans);padding:20px;display:flex;gap:8px}
+.s{flex:1;background:var(--surface-card);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:12px 11px;box-sizing:border-box;display:flex;flex-direction:column;gap:9px}
+.top{display:flex;align-items:center;gap:8px}
+.dot{width:10px;height:10px;border-radius:50%}
+.n{font:var(--fw-semibold) var(--text-xs) var(--font-sans);color:var(--slate-100)}
+.d{font:9px var(--font-sans);color:var(--text-faint);line-height:1.35}
+.h{font:9px var(--font-mono);color:var(--text-muted);margin-top:auto}</style></head>
+<body>
+<div class="s"><div class="top"><span class="dot" style="background:var(--status-idle)"></span><span class="n">Idle</span></div><div class="d">waiting · not started</div><div class="h">slate-500</div></div>
+<div class="s"><div class="top"><span class="dot" style="background:var(--status-active);box-shadow:0 0 0 3px var(--status-active-glow)"></span><span class="n">In&nbsp;progress</span></div><div class="d">transferring · in flight</div><div class="h">teal-400</div></div>
+<div class="s"><div class="top"><span class="dot" style="background:var(--status-ok);box-shadow:0 0 0 3px var(--green-glow)"></span><span class="n">Success</span></div><div class="d">imported · connected</div><div class="h">green-500</div></div>
+<div class="s"><div class="top"><span class="dot" style="background:var(--status-warn);box-shadow:0 0 0 3px var(--amber-glow)"></span><span class="n">Degraded</span></div><div class="d">retrying · warning</div><div class="h">amber-500</div></div>
+<div class="s"><div class="top"><span class="dot" style="background:var(--status-error);box-shadow:0 0 0 3px var(--red-glow)"></span><span class="n">Failed</span></div><div class="d">stuck · offline</div><div class="h">red-500</div></div>
+</body></html>

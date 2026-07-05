@@ -1,0 +1,47 @@
+<!-- @dsCard group="Components" viewport="700x300" name="Forms" subtitle="Button, IconButton, TextField, SecretField, Select, Switch" -->
+<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../../styles.css">
+<style>body{margin:0;background:var(--bg-page);font-family:var(--font-sans);padding:22px;color:var(--text-body)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:22px 28px;max-width:640px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.lab{font:var(--text-2xs) var(--font-sans);color:var(--text-faint);letter-spacing:var(--tracking-caps);text-transform:uppercase;margin-bottom:10px}</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script></head>
+<body><div id="root"></div>
+<script type="text/babel">
+const { Button, IconButton, TextField, SecretField, Select, Switch } = window.HarrborDesignSystem_2a1653;
+function Demo(){
+  const [on,setOn]=React.useState(true);
+  return (<div className="grid">
+    <div style={{gridColumn:'1 / -1'}}>
+      <div className="lab">Button — variants & sizes</div>
+      <div className="row">
+        <Button variant="primary">Test connection</Button>
+        <Button variant="secondary">Save</Button>
+        <Button variant="ghost">Cancel</Button>
+        <Button variant="danger">Remove job</Button>
+        <Button variant="primary" size="sm">Small</Button>
+        <Button variant="secondary" disabled>Disabled</Button>
+      </div>
+    </div>
+    <div>
+      <div className="lab">IconButton</div>
+      <div className="row">
+        <IconButton variant="ghost" label="refresh">↻</IconButton>
+        <IconButton variant="solid" label="settings">⚙</IconButton>
+        <IconButton variant="accent" label="add">＋</IconButton>
+      </div>
+    </div>
+    <div>
+      <div className="lab">Switch</div>
+      <div className="row"><Switch checked={on} onChange={setOn} label="Auto-import" /></div>
+    </div>
+    <TextField label="SFTP host" mono prefix="sftp://" defaultValue="seed.hetzner.net" />
+    <SecretField label="API key" isSet hint="Stored encrypted at rest" />
+    <Select label="Job lane" options={[{value:'tv',label:'tv-shows'},{value:'mov',label:'movies'}]} />
+    <TextField label="Port" mono defaultValue="8080" error="Unreachable on this port" />
+  </div>);
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<Demo/>);
+</script></body></html>

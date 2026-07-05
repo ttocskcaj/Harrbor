@@ -1,0 +1,48 @@
+<!-- @dsCard group="Components" viewport="700x430" name="Pipeline" subtitle="FlowRail, ReleaseCard, AttentionItem, ConnectionRow" -->
+<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../../styles.css">
+<style>body{margin:0;background:var(--bg-page);font-family:var(--font-sans);padding:22px;color:var(--text-body)}
+.grid{display:grid;grid-template-columns:250px 1fr;gap:22px;max-width:660px}
+.lab{font:var(--text-2xs) var(--font-sans);color:var(--text-faint);letter-spacing:var(--tracking-caps);text-transform:uppercase;margin-bottom:9px}
+.stack{display:flex;flex-direction:column;gap:9px}</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script></head>
+<body><div id="root"></div>
+<script type="text/babel">
+const { ReleaseCard, AttentionItem, ConnectionRow, FlowRail } = window.HarrborDesignSystem_2a1653;
+function Demo(){
+  return (<div style={{display:'flex',flexDirection:'column',gap:22,maxWidth:660}}>
+    <div><div className="lab">FlowRail — the signature motif</div>
+      <div style={{background:'var(--surface-panel)',border:'1px solid var(--border-subtle)',borderRadius:'var(--radius-lg)',padding:'12px 16px'}}>
+        <FlowRail bloom="transfer" phases={[
+          {phase:'discover',count:3},{phase:'download',count:7,active:true},{phase:'transfer',count:12,active:true},
+          {phase:'import',count:4,stuck:true,stuckCount:2},{phase:'cleanup',count:2},{phase:'archival',count:1256},
+        ]}/>
+      </div>
+    </div>
+    <div className="grid">
+    <div><div className="lab">ReleaseCard</div>
+      <div className="stack">
+        <ReleaseCard name="Severance.S02E07.1080p" job="tv-shows" phase="transfer" size="3.9 GB" progress={72} active eta="2m14s"/>
+        <ReleaseCard name="Dune.Part.Two.2160p" job="movies" phase="transfer" size="21 GB" progress={38} stuck eta="—"/>
+      </div>
+    </div>
+    <div>
+      <div className="lab">ConnectionRow</div>
+      <div className="stack" style={{marginBottom:18}}>
+        <ConnectionRow name="qBittorrent" kind="torrent" host="10.0.0.4:8080" status="ok" detail="24ms · v4.6"/>
+        <ConnectionRow name="SFTP" kind="transfer" host="seed.hetzner.net:22" status="warn" detail="latency 410ms"/>
+        <ConnectionRow name="Radarr" kind="movies" host="radarr.local:7878" status="error" detail="ECONNREFUSED"/>
+      </div>
+      <div className="lab">AttentionItem</div>
+      <div className="stack">
+        <AttentionItem severity="error" message="Import failed: no matching series" releaseId="rel_8fa3c19d" phase="import" time="4m ago" action="Retry"/>
+        <AttentionItem severity="warn" message="Transfer stalled over SFTP" releaseId="rel_1c92aa0" phase="transfer" time="12m ago" action="Inspect"/>
+      </div>
+    </div>
+  </div>
+  </div>);
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<Demo/>);
+</script></body></html>

@@ -3,6 +3,7 @@
 [Dd]ebugPublic/
 [Rr]elease/
 [Rr]eleases/
+!src/Harrbor/Api/Releases/
 x64/
 x86/
 [Ww][Ii][Nn]32/

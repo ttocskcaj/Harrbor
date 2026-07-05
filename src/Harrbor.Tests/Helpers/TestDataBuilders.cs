@@ -14,6 +14,7 @@ public class TrackedReleaseBuilder
     private string _stagingPath = "/staging/test";
     private DownloadStatus _downloadStatus = DownloadStatus.Pending;
     private TransferStatus _transferStatus = TransferStatus.Pending;
+    private ExtractionStatus _extractionStatus = ExtractionStatus.Pending;
     private ImportStatus _importStatus = ImportStatus.Pending;
     private CleanupStatus _cleanupStatus = CleanupStatus.Pending;
     private ArchivalStatus _archivalStatus = ArchivalStatus.Pending;
@@ -24,6 +25,8 @@ public class TrackedReleaseBuilder
     private DateTime? _downloadCompletedAtUtc;
     private DateTime? _transferStartedAtUtc;
     private DateTime? _transferCompletedAtUtc;
+    private DateTime? _extractionStartedAtUtc;
+    private DateTime? _extractionCompletedAtUtc;
     private DateTime? _importCompletedAtUtc;
     private DateTime? _cleanupCompletedAtUtc;
     private DateTime? _archivedAtUtc;
@@ -73,6 +76,12 @@ public class TrackedReleaseBuilder
     public TrackedReleaseBuilder WithTransferStatus(TransferStatus status)
     {
         _transferStatus = status;
+        return this;
+    }
+
+    public TrackedReleaseBuilder WithExtractionStatus(ExtractionStatus status)
+    {
+        _extractionStatus = status;
         return this;
     }
 
@@ -136,6 +145,18 @@ public class TrackedReleaseBuilder
         return this;
     }
 
+    public TrackedReleaseBuilder WithExtractionStartedAtUtc(DateTime? extractionStartedAtUtc)
+    {
+        _extractionStartedAtUtc = extractionStartedAtUtc;
+        return this;
+    }
+
+    public TrackedReleaseBuilder WithExtractionCompletedAtUtc(DateTime? extractionCompletedAtUtc)
+    {
+        _extractionCompletedAtUtc = extractionCompletedAtUtc;
+        return this;
+    }
+
     public TrackedReleaseBuilder WithImportCompletedAtUtc(DateTime? importCompletedAtUtc)
     {
         _importCompletedAtUtc = importCompletedAtUtc;
@@ -166,6 +187,7 @@ public class TrackedReleaseBuilder
             StagingPath = _stagingPath,
             DownloadStatus = _downloadStatus,
             TransferStatus = _transferStatus,
+            ExtractionStatus = _extractionStatus,
             ImportStatus = _importStatus,
             CleanupStatus = _cleanupStatus,
             ArchivalStatus = _archivalStatus,
@@ -176,6 +198,8 @@ public class TrackedReleaseBuilder
             DownloadCompletedAtUtc = _downloadCompletedAtUtc,
             TransferStartedAtUtc = _transferStartedAtUtc,
             TransferCompletedAtUtc = _transferCompletedAtUtc,
+            ExtractionStartedAtUtc = _extractionStartedAtUtc,
+            ExtractionCompletedAtUtc = _extractionCompletedAtUtc,
             ImportCompletedAtUtc = _importCompletedAtUtc,
             CleanupCompletedAtUtc = _cleanupCompletedAtUtc,
             ArchivedAtUtc = _archivedAtUtc
@@ -195,6 +219,7 @@ public class JobDefinitionBuilder
     private int _transferParallelism = 2;
     private int _maxTransferRetries = 3;
     private TimeSpan _transferRetryDelay = TimeSpan.FromMinutes(5);
+    private bool _extractionEnabled = true;
     private string? _completedCategory = "completed";
     private TimeSpan _importTimeout = TimeSpan.FromHours(24);
     private bool _enabled = true;
@@ -259,6 +284,12 @@ public class JobDefinitionBuilder
         return this;
     }
 
+    public JobDefinitionBuilder WithExtractionEnabled(bool extractionEnabled)
+    {
+        _extractionEnabled = extractionEnabled;
+        return this;
+    }
+
     public JobDefinitionBuilder WithCompletedCategory(string? category)
     {
         _completedCategory = category;
@@ -291,6 +322,7 @@ public class JobDefinitionBuilder
             TransferParallelism = _transferParallelism,
             MaxTransferRetries = _maxTransferRetries,
             TransferRetryDelay = _transferRetryDelay,
+            ExtractionEnabled = _extractionEnabled,
             CompletedCategory = _completedCategory,
             ImportTimeout = _importTimeout,
             Enabled = _enabled

@@ -127,6 +127,7 @@ Each job monitors a specific category of downloads.
 | `TransferParallelism` | `2` | Max concurrent transfers |
 | `MaxTransferRetries` | `3` | Retry attempts for failed transfers |
 | `TransferRetryDelay` | `00:05:00` | Cooldown between retries |
+| `ExtractionEnabled` | `true` | Unpack zip/rar/7z archives after transfer |
 | `ImportTimeout` | `1.00:00:00` | Max time to wait for import |
 | `Enabled` | `true` | Enable/disable this job |
 

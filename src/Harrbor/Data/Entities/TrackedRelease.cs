@@ -46,6 +46,11 @@ public class TrackedRelease
     public TransferStatus TransferStatus { get; set; } = TransferStatus.Pending;
 
     /// <summary>
+    /// Current status of the extraction phase.
+    /// </summary>
+    public ExtractionStatus ExtractionStatus { get; set; } = ExtractionStatus.Pending;
+
+    /// <summary>
     /// Current status of the import phase.
     /// </summary>
     public ImportStatus ImportStatus { get; set; } = ImportStatus.Pending;
@@ -94,6 +99,16 @@ public class TrackedRelease
     /// When the transfer to local staging completed.
     /// </summary>
     public DateTime? TransferCompletedAtUtc { get; set; }
+
+    /// <summary>
+    /// When archive extraction in staging started.
+    /// </summary>
+    public DateTime? ExtractionStartedAtUtc { get; set; }
+
+    /// <summary>
+    /// When archive extraction in staging completed.
+    /// </summary>
+    public DateTime? ExtractionCompletedAtUtc { get; set; }
 
     /// <summary>
     /// When Sonarr/Radarr completed the import.
@@ -157,6 +172,17 @@ public enum CleanupStatus
 public enum ArchivalStatus
 {
     Pending,
+    Completed,
+    Failed
+}
+
+/// <summary>
+/// Status of the extraction phase.
+/// </summary>
+public enum ExtractionStatus
+{
+    Pending,
+    InProgress,
     Completed,
     Failed
 }

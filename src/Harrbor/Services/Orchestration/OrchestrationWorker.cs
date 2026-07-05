@@ -81,6 +81,7 @@ public class OrchestrationWorker : BackgroundService
         var discoveryHandler = scope.ServiceProvider.GetRequiredService<IDiscoveryPhaseHandler>();
         var downloadHandler = scope.ServiceProvider.GetRequiredService<IDownloadPhaseHandler>();
         var transferHandler = scope.ServiceProvider.GetRequiredService<ITransferPhaseHandler>();
+        var extractionHandler = scope.ServiceProvider.GetRequiredService<IExtractionPhaseHandler>();
         var importHandler = scope.ServiceProvider.GetRequiredService<IImportPhaseHandler>();
         var cleanupHandler = scope.ServiceProvider.GetRequiredService<ICleanupPhaseHandler>();
         var archivalHandler = scope.ServiceProvider.GetRequiredService<IArchivalPhaseHandler>();
@@ -94,19 +95,22 @@ public class OrchestrationWorker : BackgroundService
         // 3. PROCESS PENDING TRANSFERS - Run rclone transfers
         await transferHandler.ExecuteAsync(job, dbContext, cancellationToken);
 
-        // 4. PROCESS PENDING IMPORTS - Check if Sonarr/Radarr has imported
+        // 4. PROCESS PENDING EXTRACTIONS - Unpack archives in staging
+        await extractionHandler.ExecuteAsync(job, dbContext, cancellationToken);
+
+        // 5. PROCESS PENDING IMPORTS - Check if Sonarr/Radarr has imported
         await importHandler.ExecuteAsync(job, dbContext, cancellationToken);
 
-        // 5. PROCESS PENDING CLEANUP - Delete files from staging
+        // 6. PROCESS PENDING CLEANUP - Delete files from staging
         await cleanupHandler.ExecuteAsync(job, dbContext, cancellationToken);
 
-        // 6. PROCESS PENDING ARCHIVAL - Change torrent category
+        // 7. PROCESS PENDING ARCHIVAL - Change torrent category
         await archivalHandler.ExecuteAsync(job, dbContext, cancellationToken);
 
         // Log summary of tracked releases for this job
         var summary = await dbContext.TrackedReleases
             .Where(r => r.JobName == job.Name)
-            .GroupBy(r => new { r.DownloadStatus, r.TransferStatus, r.ImportStatus })
+            .GroupBy(r => new { r.DownloadStatus, r.TransferStatus, r.ExtractionStatus, r.ImportStatus })
             .Select(g => new { g.Key, Count = g.Count() })
             .ToListAsync(cancellationToken);
 
@@ -116,7 +120,7 @@ public class OrchestrationWorker : BackgroundService
                 "Job '{JobName}': Tracked releases summary: {Summary}",
                 job.Name,
                 string.Join(", ", summary.Select(s =>
-                    $"[D:{s.Key.DownloadStatus}/T:{s.Key.TransferStatus}/I:{s.Key.ImportStatus}]={s.Count}")));
+                    $"[D:{s.Key.DownloadStatus}/T:{s.Key.TransferStatus}/E:{s.Key.ExtractionStatus}/I:{s.Key.ImportStatus}]={s.Count}")));
         }
 
         _logger.LogDebug("Job '{JobName}': Reconciliation cycle completed", job.Name);

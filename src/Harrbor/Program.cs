@@ -6,6 +6,7 @@ using Harrbor.Data.Entities;
 using Harrbor.HealthChecks;
 using Harrbor.Services;
 using Harrbor.Services.Clients;
+using Harrbor.Services.Extraction;
 using Harrbor.Services.Orchestration;
 using Harrbor.Services.RemoteStorage;
 using Harrbor.Services.Orchestration.Phases;
@@ -59,6 +60,7 @@ try
     // Services
     builder.Services.AddSingleton<IQBittorrentClient, QBittorrentClientWrapper>();
     builder.Services.AddScoped<IRemoteStorageService, RcloneRemoteStorageService>();
+    builder.Services.AddScoped<IArchiveExtractionService, ArchiveExtractionService>();
     builder.Services.AddScoped<IMediaServiceResolver, MediaServiceResolver>();
 
     builder.Services.AddHttpClient<ISonarrClient, SonarrClient>()
@@ -74,6 +76,7 @@ try
     builder.Services.AddScoped<IDiscoveryPhaseHandler, DiscoveryPhaseHandler>();
     builder.Services.AddScoped<IDownloadPhaseHandler, DownloadPhaseHandler>();
     builder.Services.AddScoped<ITransferPhaseHandler, TransferPhaseHandler>();
+    builder.Services.AddScoped<IExtractionPhaseHandler, ExtractionPhaseHandler>();
     builder.Services.AddScoped<IImportPhaseHandler, ImportPhaseHandler>();
     builder.Services.AddScoped<ICleanupPhaseHandler, CleanupPhaseHandler>();
     builder.Services.AddScoped<IArchivalPhaseHandler, ArchivalPhaseHandler>();
@@ -114,6 +117,26 @@ try
             logger.LogInformation(
                 "Reset {Count} stuck transfers to Pending state",
                 stuckTransfers.Count);
+        }
+
+        // Reset any stuck InProgress extractions (safe to redo: extraction overwrites existing output)
+        var stuckExtractions = await db.TrackedReleases
+            .Where(r => r.ExtractionStatus == ExtractionStatus.InProgress)
+            .ToListAsync();
+
+        if (stuckExtractions.Count > 0)
+        {
+            foreach (var release in stuckExtractions)
+            {
+                release.ExtractionStatus = ExtractionStatus.Pending;
+                release.ExtractionStartedAtUtc = null;
+            }
+            await db.SaveChangesAsync();
+
+            var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+            logger.LogInformation(
+                "Reset {Count} stuck extractions to Pending state",
+                stuckExtractions.Count);
         }
     }
 

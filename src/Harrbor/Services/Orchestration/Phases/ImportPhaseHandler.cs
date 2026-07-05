@@ -34,6 +34,7 @@ public class ImportPhaseHandler : IImportPhaseHandler
         var pendingImports = await dbContext.TrackedReleases
             .Where(r => r.JobName == job.Name
                 && r.TransferStatus == TransferStatus.Completed
+                && r.ExtractionStatus == ExtractionStatus.Completed
                 && r.ImportStatus == ImportStatus.Pending)
             .ToListAsync(cancellationToken);
 
@@ -75,10 +76,11 @@ public class ImportPhaseHandler : IImportPhaseHandler
             }
             else
             {
-                // Still in queue - check timeout
-                if (release.TransferCompletedAtUtc.HasValue)
+                // Still in queue - check timeout from when the release became importable
+                var importableAtUtc = release.ExtractionCompletedAtUtc ?? release.TransferCompletedAtUtc;
+                if (importableAtUtc.HasValue)
                 {
-                    var elapsed = DateTime.UtcNow - release.TransferCompletedAtUtc.Value;
+                    var elapsed = DateTime.UtcNow - importableAtUtc.Value;
                     if (elapsed > job.ImportTimeout)
                     {
                         release.ImportStatus = ImportStatus.Failed;

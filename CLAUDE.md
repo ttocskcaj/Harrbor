@@ -33,26 +33,28 @@ dotnet ef database update
 
 ### Core Workflow (OrchestrationWorker)
 
-The service runs as a `BackgroundService` with a reconciliation loop for each configured job. Each cycle processes releases through six sequential phases:
+The service runs as a `BackgroundService` with a reconciliation loop for each configured job. Each cycle processes releases through seven sequential phases:
 
 1. **Discover** - Query Sonarr/Radarr queue for new downloads, create `TrackedRelease` records
 2. **Process Downloads** - Check qBittorrent for completed torrents, update status when progress=100%
 3. **Process Transfers** - Run rclone transfers from seedbox to local staging (with parallelism limits and retry logic)
-4. **Process Imports** - Verify Sonarr/Radarr has imported from staging to final library
-5. **Process Cleanup** - Delete files from staging after confirmed import
-6. **Process Archival** - Change torrent category in qBittorrent to prevent re-processing
+4. **Process Extractions** - Unpack zip/rar/7z archives in staging (SharpCompress; detects old-style `.r00` and new-style `.partN.rar` volume sets)
+5. **Process Imports** - Verify Sonarr/Radarr has imported from staging to final library
+6. **Process Cleanup** - Delete files from staging after confirmed import
+7. **Process Archival** - Change torrent category in qBittorrent to prevent re-processing
 
 ### Key Abstractions
 
 - **IMediaService** (`ISonarrClient`, `IRadarrClient`) - Abstraction over Sonarr/Radarr APIs for queue queries and import confirmation
 - **IRemoteStorageService** - rclone-based SFTP transfers from seedbox
+- **IArchiveExtractionService** - SharpCompress-based archive extraction in staging
 - **IQBittorrentClient** - Wrapper around qBittorrent API for torrent state queries and category management
 - **MediaServiceResolver** - Resolves the correct media service based on job's `ServiceType`
 
 ### Data Model
 
 `TrackedRelease` tracks each download through the pipeline with status enums for each phase:
-- `DownloadStatus`, `TransferStatus`, `ImportStatus`, `CleanupStatus`, `ArchivalStatus`
+- `DownloadStatus`, `TransferStatus`, `ExtractionStatus`, `ImportStatus`, `CleanupStatus`, `ArchivalStatus`
 - Error tracking: `ErrorCount`, `LastError`, `LastErrorAtUtc`
 - Timestamps for each phase completion
 
@@ -63,6 +65,7 @@ Jobs are configured in `appsettings.json` under the `Jobs.Definitions` array. Ea
 - `RemotePath` / `StagingPath`
 - `QBittorrentCategory` for filtering
 - `TransferParallelism`, `MaxTransferRetries`, `TransferRetryDelay`
+- `ExtractionEnabled` to unpack archives after transfer (default true)
 - `CompletedCategory` for archival
 
 Use `appsettings.local.json` for local development overrides (not committed).
@@ -70,6 +73,7 @@ Use `appsettings.local.json` for local development overrides (not committed).
 ## Key Packages
 
 - `QBittorrent.Client` - qBittorrent WebUI API client
+- `SharpCompress` - zip/rar/7z extraction (MIT licensed, pure .NET)
 - `Microsoft.EntityFrameworkCore.Sqlite` - Persistent state storage
 - `Microsoft.Extensions.Http.Resilience` - HTTP client retry/circuit breaker policies
 - `Serilog` - Structured logging

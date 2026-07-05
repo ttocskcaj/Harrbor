@@ -19,6 +19,7 @@ public class JobDefinition
     public int TransferParallelism { get; set; } = 2;
     public int MaxTransferRetries { get; set; } = 3;
     public TimeSpan TransferRetryDelay { get; set; } = TimeSpan.FromMinutes(5);
+    public bool ExtractionEnabled { get; set; } = true;
     public string? CompletedCategory { get; set; }
     public TimeSpan ImportTimeout { get; set; } = TimeSpan.FromHours(24);
     public bool Enabled { get; set; } = true;

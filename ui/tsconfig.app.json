@@ -16,6 +16,10 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
+    /* Path alias: import from '@/…' instead of long relative paths.
+       (No baseUrl — TS 6 deprecates it; paths resolve relative to this file.) */
+    "paths": { "@/*": ["./src/*"] },
+
     /* Linting */
     "noUnusedLocals": true,
     "noUnusedParameters": true,

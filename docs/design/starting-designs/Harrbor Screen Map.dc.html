@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#e7e4dc;color:#2c2a26;font-family:'Kalam',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace}
+.canvas{padding:54px 60px 140px}
+.h1{font-size:36px;font-weight:700;margin:0}
+.sub{font-size:15px;color:#6f6b62;margin:6px 0 0;max-width:820px;line-height:1.5}
+.legend{display:flex;gap:22px;flex-wrap:wrap;align-items:center;margin:22px 0 46px;padding:12px 16px;background:#f4f1ea;border:1.5px dashed #cbc7bd;border-radius:9px;font-size:13px}
+.lg{display:flex;align-items:center;gap:7px;color:#55524b}
+.dot{width:10px;height:10px;border-radius:50%;display:inline-block;flex:none}
+.s-idle{background:#8b8f99}.s-live{background:#2fa39a;box-shadow:0 0 0 3px rgba(47,163,154,.2)}
+.s-ok{background:#4d9a5c}.s-warn{background:#d98a2b;box-shadow:0 0 0 3px rgba(217,138,43,.22)}
+.s-fail{background:#cf5b4a;box-shadow:0 0 0 3px rgba(207,91,74,.22)}
+.row{margin-bottom:64px}
+.rowhead{display:flex;align-items:baseline;gap:13px;margin-bottom:20px}
+.rowtag{font-family:'IBM Plex Mono';font-size:12px;font-weight:600;background:#2c2a26;color:#fff;padding:3px 9px;border-radius:5px}
+.rowtitle{font-size:22px;font-weight:700}
+.rownote{font-size:13.5px;color:#8a857a}
+.frames{display:flex;gap:38px;flex-wrap:wrap;align-items:flex-start}
+.frame{flex:none;background:#fbfaf7;border:1.5px solid #c7c3ba;border-radius:10px;box-shadow:0 2px 0 rgba(0,0,0,.05),0 10px 26px rgba(0,0,0,.09);overflow:hidden;position:relative}
+.cap{display:flex;align-items:center;gap:9px;padding:9px 13px;border-bottom:1.5px dashed #d6d2c8;background:#f1eee7}
+.capid{font-family:'IBM Plex Mono';font-size:11px;font-weight:600;background:#e0dbcf;color:#4a4740;padding:2px 7px;border-radius:4px}
+.captitle{font-size:14.5px;font-weight:700}
+.capstate{font-size:12px;color:#8a857a;margin-left:auto;font-family:'IBM Plex Mono'}
+.app{display:flex;min-height:100%}
+.side{width:150px;background:#f0ede5;border-right:1.5px solid #d6d2c8;padding:12px 9px;display:flex;flex-direction:column;gap:2px;flex:none}
+.brand{display:flex;align-items:center;gap:8px;padding:2px 5px 14px}
+.beacon{width:20px;height:20px;border-radius:50%;border:2px solid #d98a2b;box-shadow:0 0 0 3px rgba(217,138,43,.18);flex:none}
+.brandn{font-weight:700;font-size:15px}
+.nav{font-size:12.5px;padding:5px 8px;border-radius:5px;color:#66625a;border-left:3px solid transparent}
+.nav.act{background:#f4e7d1;color:#7c4e14;font-weight:700;border-left-color:#d98a2b}
+.tele{margin-top:auto;padding-top:12px;font-size:9.5px;color:#9a958a;line-height:1.6}
+.top{height:44px;border-bottom:1.5px solid #d6d2c8;display:flex;align-items:center;gap:10px;padding:0 14px;background:#f6f3ec}
+.toptitle{font-weight:700;font-size:15px}
+.main{flex:1;padding:14px;background:#f8f5ee;min-width:0}
+.tile{background:#f3f0e9;border:1px solid #d6d2c8;border-radius:7px;padding:9px 11px}
+.eyebrow{font-family:'IBM Plex Mono';font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:#a09b8f}
+.dash{border:1.5px dashed #c6c1b6;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#a09b8f;font-size:11.5px;background:#f4f1ea;text-align:center}
+.bar{height:7px;background:#dcd8ce;border-radius:4px;overflow:hidden}
+.barfill{height:100%;border-radius:4px}
+.chip{display:inline-flex;align-items:center;gap:5px;border:1.3px solid #bdb8ac;border-radius:5px;padding:3px 8px;font-size:11.5px;background:#f4f1ea;color:#55524b}
+.pill{display:inline-flex;align-items:center;gap:5px;border:1.3px solid #bdb8ac;border-radius:999px;padding:2px 9px;font-size:11.5px;background:#f4f1ea;color:#55524b}
+.btn{border:1.5px solid #6f6b62;border-radius:6px;padding:5px 12px;font-size:12.5px;font-weight:700;background:#fff;display:inline-flex;gap:6px;align-items:center;color:#3a3833;cursor:default}
+.btn.pri{background:#e59a34;border-color:#c07f1c;color:#3a2a0e}
+.btn.sm{padding:3px 9px;font-size:11.5px}
+.btn.gho{border-color:#c6c1b6;color:#77736a;background:transparent}
+.input{border:1.4px solid #c6c1b6;border-radius:6px;background:#eeeae1;padding:6px 9px;font-size:11.5px;color:#6a675f;box-shadow:inset 0 1px 2px rgba(0,0,0,.06);display:flex;align-items:center;justify-content:space-between}
+.input.err{border-color:#cf5b4a;box-shadow:inset 0 1px 2px rgba(0,0,0,.06),0 0 0 3px rgba(207,91,74,.14)}
+.flab{font-size:11.5px;color:#77736a;margin-bottom:4px;display:block}
+.errmsg{font-size:11px;color:#c0492f;font-family:'IBM Plex Mono';margin-top:4px}
+.okmsg{font-size:11px;color:#3f8a50;font-family:'IBM Plex Mono'}
+.badge{font-family:'IBM Plex Mono';font-size:10px;padding:2px 6px;border-radius:4px;border:1px solid #c6c1b6;background:#f4f1ea;color:#66625a}
+.note{font-family:'Kalam';color:#b5732a;font-size:13px;line-height:1.4}
+.col{background:#f3f0e9;border:1px solid #d9d5cb;border-radius:7px;padding:7px 6px;flex:1;min-width:0}
+.coltop{border-top:2.5px solid #999;border-radius:2px;margin:-7px -6px 7px;padding:7px 8px 6px;display:flex;justify-content:space-between;align-items:center}
+.rcard{background:#faf8f3;border:1px solid #d3cec3;border-radius:6px;padding:6px 7px;margin-bottom:6px;font-size:11px}
+.rcard.stuck{border-color:#cf5b4a;background:#fbf0ee;box-shadow:0 0 0 2px rgba(207,91,74,.1)}
+.attn{border:1.5px solid #e6b98f;background:#fbf3e8;border-left:4px solid #d98a2b;border-radius:7px;padding:8px 10px;margin-bottom:8px;font-size:12px}
+.attn.fail{border-color:#e6a79b;background:#fbefec;border-left-color:#cf5b4a}
+.tgrid{display:grid;font-size:11.5px}
+.th{font-family:'IBM Plex Mono';font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;color:#a09b8f;padding:6px 8px}
+.td{padding:7px 8px;border-top:1px solid #e4e0d6;display:flex;align-items:center;gap:6px}
+.tgl{width:30px;height:17px;border-radius:999px;background:#4d9a5c;position:relative;flex:none}
+.tgl.off{background:#c6c1b6}
+.tgl:after{content:"";position:absolute;top:2px;left:15px;width:13px;height:13px;border-radius:50%;background:#fff}
+.tgl.off:after{left:2px}
+.step{display:flex;align-items:center;gap:8px;font-size:12px;color:#8a857a}
+.stepn{width:22px;height:22px;border-radius:50%;border:1.6px solid #c6c1b6;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;font-family:'IBM Plex Mono';flex:none;background:#f4f1ea}
+.step.done .stepn{background:#4d9a5c;border-color:#4d9a5c;color:#fff}
+.step.cur .stepn{background:#e59a34;border-color:#c07f1c;color:#3a2a0e}
+.step.cur{color:#3a3833;font-weight:700}
+.seg{flex:1;height:2px;background:#d6d2c8;margin:0 4px}
+</style>
+</helmet>
+
+<div class="canvas">
+  <div class="beacon" style="display:none"></div>
+  <h1 class="h1">Harrbor — v1 screen map</h1>
+  <p class="sub">Lo-fi wireframes, structure only. Every screen in Section 5 of the brief (5.1–5.7), laid out to pan &amp; zoom. Amber = the "harbor light" accent (primary / active); machine data in mono; status shown by dot <em>and</em> label, never colour alone.</p>
+
+  <div class="legend">
+    <span class="eyebrow" style="margin-right:2px">Status vocabulary</span>
+    <span class="lg"><span class="dot s-idle"></span>Idle / waiting</span>
+    <span class="lg"><span class="dot s-live"></span>Transferring</span>
+    <span class="lg"><span class="dot s-ok"></span>Imported / connected</span>
+    <span class="lg"><span class="dot s-warn"></span>Retrying / degraded</span>
+    <span class="lg"><span class="dot s-fail"></span>Failed / offline</span>
+  </div>
+
+  <!-- ============ CONCEPT · UNIFIED OPERATE VIEW ============ -->
+  <div class="row" id="concept">
+    <div class="rowhead"><span class="rowtag">5.1</span><span class="rowtitle">Operate — the monitoring view</span><span class="rownote">Replaces the old Dashboard + Pipeline pages · FlowRail is the persistent spine · attention-first, phases expand on demand</span></div>
+    <div class="frames">
+
+      <!-- C1 collapsed / attention-first -->
+      <div class="frame" id="c1" style="width:1000px">
+        <div class="cap"><span class="capid">C1</span><span class="captitle">Operate — default</span><span class="capstate">collapsed · attention-first</span></div>
+        <div class="app">
+          <div class="side">
+            <div class="brand"><span class="beacon"></span><span class="brandn">Harrbor</span></div>
+            <div class="nav act">Operate</div><div class="nav" style="font-size:10px;color:#a09b8f;padding-left:20px;border:none">↳ was Dashboard + Pipeline</div><div class="nav">Jobs</div><div class="nav">Connections</div><div class="nav">History</div><div class="nav">Logs</div>
+            <div class="tele mono">▚ 42.8 MB/s · 12 in-flight<br>last-sync 3s · up 6d</div>
+          </div>
+          <div style="flex:1">
+            <div class="top"><span class="toptitle">Operate</span>
+              <span style="margin-left:14px;display:flex;gap:9px;align-items:center;font-size:10.5px" class="mono">
+                <span style="color:#3f8a50"><span class="dot s-ok" style="vertical-align:0"></span> qBit</span>
+                <span style="color:#3f8a50"><span class="dot s-ok" style="vertical-align:0"></span> Sonarr</span>
+                <span style="color:#3f8a50"><span class="dot s-ok" style="vertical-align:0"></span> Radarr</span>
+                <span style="color:#3f8a50"><span class="dot s-ok" style="vertical-align:0"></span> SFTP</span>
+              </span>
+              <span class="badge" style="margin-left:auto">↻ auto 3s</span>
+            </div>
+            <div class="main">
+              <div class="tile" style="margin-bottom:14px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="eyebrow">Pipeline · tap a phase to drill in</div><span style="font-size:10px;color:#a09b8f" class="mono">28 releases flowing</span></div>
+                <div style="display:flex;align-items:flex-start">
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:80px;cursor:pointer"><div style="width:40px;height:40px;border-radius:50%;border:2px solid #bdb8ac;background:#f4f1ea;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px">4</div><span style="font-size:10.5px;color:#66625a">Discover ▸</span></div>
+                  <div class="seg" style="margin-top:19px;height:3px;background:#d3cfc4"></div>
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:80px;cursor:pointer"><div style="width:40px;height:40px;border-radius:50%;border:2px solid #bdb8ac;background:#f4f1ea;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px">6</div><span style="font-size:10.5px;color:#66625a">Download ▸</span></div>
+                  <div class="seg" style="margin-top:19px;height:3px;background:linear-gradient(90deg,#d3cfc4,#cf5b4a)"></div>
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:80px;cursor:pointer;position:relative"><div style="width:44px;height:44px;border-radius:50%;border:2px solid #cf5b4a;background:#fbf0ee;box-shadow:0 0 0 4px rgba(207,91,74,.16);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px">12</div><span style="position:absolute;top:-6px;right:8px;background:#d98a2b;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px">2 stuck</span><span style="font-size:10.5px;color:#b5432f;font-weight:700">Transfer ▸</span></div>
+                  <div class="seg" style="margin-top:19px;height:3px;background:#d3cfc4"></div>
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:80px;cursor:pointer"><div style="width:40px;height:40px;border-radius:50%;border:2px solid #bdb8ac;background:#f4f1ea;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px">3</div><span style="font-size:10.5px;color:#66625a">Import ▸</span></div>
+                  <div class="seg" style="margin-top:19px;height:3px;background:#d3cfc4"></div>
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:80px;cursor:pointer"><div style="width:40px;height:40px;border-radius:50%;border:2px solid #bdb8ac;background:#f4f1ea;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px">1</div><span style="font-size:10.5px;color:#66625a">Cleanup ▸</span></div>
+                  <div class="seg" style="margin-top:19px;height:3px;background:#d3cfc4"></div>
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:80px;cursor:pointer"><div style="width:40px;height:40px;border-radius:50%;border:2px solid #bdb8ac;background:#f4f1ea;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px">2</div><span style="font-size:10.5px;color:#66625a">Archival ▸</span></div>
+                </div>
+              </div>
+              <div class="eyebrow" style="margin-bottom:8px">Needs attention · 2 &nbsp;<span style="color:#a09b8f;text-transform:none;letter-spacing:0">— everything healthy stays collapsed</span></div>
+              <div class="attn fail"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div><b style="font-size:12.5px">Transfer stalled over SFTP (0 B/s for 6m)</b><div class="mono" style="font-size:10px;color:#8a857a;margin-top:3px">rel_8fa3c19d · Transfer · retry 5/5 · 6m ago</div></div><div style="display:flex;gap:6px"><span class="btn sm pri">Retry</span><span class="btn sm gho">Inspect</span></div></div></div>
+              <div class="attn fail"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div><b style="font-size:12.5px">Import failed — no matching series in Sonarr</b><div class="mono" style="font-size:10px;color:#8a857a;margin-top:3px">rel_2b71ee40 · Import · 4m ago</div></div><div style="display:flex;gap:6px"><span class="btn sm pri">Retry</span><span class="btn sm gho">Skip</span></div></div></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding:8px 10px;border:1px dashed #d6d2c8;border-radius:7px;font-size:11px;color:#8a857a"><span>▸ Jobs · tv-shows, movies healthy — next poll 42s</span><span class="mono">expand</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- C2 phase expanded -->
+      <div class="frame" id="c2" style="width:1000px">
+        <div class="cap"><span class="capid">C2</span><span class="captitle">Operate — Transfer expanded</span><span class="capstate">phase selected · drill drawer</span></div>
+        <div class="app">
+          <div class="side">
+            <div class="brand"><span class="beacon"></span><span class="brandn">Harrbor</span></div>
+            <div class="nav act">Operate</div><div class="nav" style="font-size:10px;color:#a09b8f;padding-left:20px;border:none">↳ was Dashboard + Pipeline</div><div class="nav">Jobs</div><div class="nav">Connections</div><div class="nav">History</div><div class="nav">Logs</div>
+            <div class="tele mono">▚ 0 B/s · 2 stalled<br>last-sync 3s · up 6d</div>
+          </div>
+          <div style="flex:1">
+            <div class="top"><span class="toptitle">Operate</span>
+              <span style="margin-left:14px;display:flex;gap:9px;align-items:center;font-size:10.5px" class="mono">
+                <span style="color:#3f8a50"><span class="dot s-ok" style="vertical-align:0"></span> qBit</span>
+                <span style="color:#3f8a50"><span class="dot s-ok" style="vertical-align:0"></span> Sonarr</span>
+                <span style="color:#b5732a"><span class="dot s-warn" style="vertical-align:0"></span> Radarr</span>
+                <span style="color:#b5432f"><span class="dot s-fail" style="vertical-align:0"></span> SFTP</span>
+              </span>
+              <span class="badge" style="margin-left:auto">↻ auto 3s</span>
+            </div>
+            <div class="main">
+              <div class="tile" style="margin-bottom:0;border-bottom-left-radius:0;border-bottom-right-radius:0">
+                <div class="eyebrow" style="margin-bottom:10px">Pipeline · Transfer selected</div>
+                <div style="display:flex;align-items:flex-start">
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:80px;opacity:.55"><div style="width:36px;height:36px;border-radius:50%;border:2px solid #bdb8ac;background:#f4f1ea;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">4</div><span style="font-size:10px;color:#66625a">Discover</span></div>
+                  <div class="seg" style="margin-top:17px;height:3px;background:#d3cfc4"></div>
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:80px;opacity:.55"><div style="width:36px;height:36px;border-radius:50%;border:2px solid #bdb8ac;background:#f4f1ea;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">6</div><span style="font-size:10px;color:#66625a">Download</span></div>
+                  <div class="seg" style="margin-top:17px;height:3px;background:linear-gradient(90deg,#d3cfc4,#cf5b4a)"></div>
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:80px;position:relative"><div style="width:46px;height:46px;border-radius:50%;border:2.5px solid #d98a2b;background:#f6e6cd;box-shadow:0 0 0 4px rgba(217,138,43,.22);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px">12</div><span style="position:absolute;top:-6px;right:6px;background:#d98a2b;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px">2 stuck</span><span style="font-size:10.5px;color:#b5732a;font-weight:700">Transfer ▾</span></div>
+                  <div class="seg" style="margin-top:17px;height:3px;background:#d3cfc4"></div>
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:80px;opacity:.55"><div style="width:36px;height:36px;border-radius:50%;border:2px solid #bdb8ac;background:#f4f1ea;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">3</div><span style="font-size:10px;color:#66625a">Import</span></div>
+                  <div class="seg" style="margin-top:17px;height:3px;background:#d3cfc4"></div>
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:80px;opacity:.55"><div style="width:36px;height:36px;border-radius:50%;border:2px solid #bdb8ac;background:#f4f1ea;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">1</div><span style="font-size:10px;color:#66625a">Cleanup</span></div>
+                  <div class="seg" style="margin-top:17px;height:3px;background:#d3cfc4"></div>
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:80px;opacity:.55"><div style="width:36px;height:36px;border-radius:50%;border:2px solid #bdb8ac;background:#f4f1ea;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">2</div><span style="font-size:10px;color:#66625a">Archival</span></div>
+                </div>
+              </div>
+              <div style="border:1.5px solid #e0dbcf;border-top:2.5px solid #d98a2b;border-radius:0 0 8px 8px;background:#faf8f3;padding:2px 0 0">
+                <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:11px"><span class="eyebrow">Transfer · 12 releases</span><span class="pill" style="border-color:#e6a79b;background:#fbefec;color:#b5432f;padding:1px 7px"><span class="dot s-fail"></span>2 stuck first</span><span class="chip" style="margin-left:auto;padding:2px 7px">Job: all ▾</span><span class="chip" style="padding:2px 7px">▴ collapse</span></div>
+                <div class="tgrid" style="grid-template-columns:2.4fr 1fr 1.2fr 0.9fr 1fr">
+                  <div class="th">Title</div><div class="th">Job</div><div class="th">Progress</div><div class="th">In phase</div><div class="th">Status</div>
+                  <div class="td" style="background:#fbf0ee"><b>The Bear S03E06</b></div><div class="td mono" style="background:#fbf0ee;color:#8a857a">tv-shows</div><div class="td" style="background:#fbf0ee"><div class="bar" style="flex:1"><div class="barfill" style="width:34%;background:#cf5b4a"></div></div></div><div class="td mono" style="background:#fbf0ee;color:#b5432f">6m</div><div class="td" style="background:#fbf0ee"><span class="dot s-fail"></span><span style="color:#b5432f">Stalled 0 B/s</span></div>
+                  <div class="td" style="background:#fbf0ee"><b>Alien Romulus</b></div><div class="td mono" style="background:#fbf0ee;color:#8a857a">movies</div><div class="td" style="background:#fbf0ee"><div class="bar" style="flex:1"><div class="barfill" style="width:12%;background:#cf5b4a"></div></div></div><div class="td mono" style="background:#fbf0ee;color:#b5432f">3m</div><div class="td" style="background:#fbf0ee"><span class="dot s-warn"></span><span style="color:#b5732a">Retry 2/5</span></div>
+                  <div class="td"><b>Fallout S01E05</b></div><div class="td mono" style="color:#8a857a">tv-shows</div><div class="td"><div class="bar" style="flex:1"><div class="barfill" style="width:62%;background:#2fa39a"></div></div></div><div class="td mono" style="color:#8a857a">1m</div><div class="td"><span class="dot s-live"></span>62% · 4.2 MB/s</div>
+                  <div class="td"><b>Furiosa</b></div><div class="td mono" style="color:#8a857a">movies</div><div class="td"><div class="bar" style="flex:1"><div class="barfill" style="width:88%;background:#2fa39a"></div></div></div><div class="td mono" style="color:#8a857a">2m</div><div class="td"><span class="dot s-live"></span>88% · 6.1 MB/s</div>
+                  <div class="td" style="color:#8a857a;font-size:10.5px" >+ 8 more transferring…</div><div class="td"></div><div class="td"></div><div class="td"></div><div class="td"></div>
+                </div>
+              </div>
+              <div class="note" style="margin-top:12px;color:#8a857a">Selecting a phase expands its list in place; the rail stays put as the spine. This <em>is</em> the Pipeline table — scoped by the rail instead of a separate page.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ 5.1 OPERATE · list mode + mobile ============ -->
+  <div class="row" id="operate-more">
+    <div class="rowhead"><span class="rowtag">5.1</span><span class="rowtitle">Operate — list mode &amp; mobile</span><span class="rownote">List mode = the scale answer (200+ across all phases) · mobile = the rail becomes a horizontal strip</span></div>
+    <div class="frames">
+
+      <!-- op list mode -->
+      <div class="frame" id="c3" style="width:1040px">
+        <div class="cap"><span class="capid">C3</span><span class="captitle">Operate — list mode</span><span class="capstate">scale · 200 releases, all phases</span></div>
+        <div class="app">
+          <div class="side">
+            <div class="brand"><span class="beacon"></span><span class="brandn">Harrbor</span></div>
+            <div class="nav act">Operate</div><div class="nav" style="font-size:10px;color:#a09b8f;padding-left:20px;border:none">↳ was Dashboard + Pipeline</div><div class="nav">Jobs</div><div class="nav">Connections</div><div class="nav">History</div><div class="nav">Logs</div>
+            <div class="tele mono">▚ 42.8 MB/s · 12 in-flight</div>
+          </div>
+          <div style="flex:1">
+            <div class="top"><span class="toptitle">Operate</span>
+              <span style="margin-left:14px;display:flex;border:1.4px solid #c6c1b6;border-radius:6px;overflow:hidden;font-size:11.5px"><span style="padding:4px 11px;color:#77736a">Rail</span><span style="padding:4px 11px;background:#e59a34;color:#3a2a0e;font-weight:700">List</span></span>
+              <span class="input" style="margin-left:auto;width:150px">🔍 search title…</span><span class="chip">Job ▾</span><span class="chip">Phase ▾</span><span class="chip">Status ▾</span>
+            </div>
+            <div class="main" style="padding:0">
+              <div class="tgrid" style="grid-template-columns:2.4fr 1fr 1fr 0.9fr 1.3fr 1fr">
+                <div class="th">Title</div><div class="th">Job</div><div class="th">Phase</div><div class="th">In phase</div><div class="th">Progress</div><div class="th">Status</div>
+                <div class="td" style="background:#fbf0ee"><b>The Bear S03E06</b></div><div class="td mono" style="background:#fbf0ee;color:#8a857a">tv-shows</div><div class="td" style="background:#fbf0ee">Transfer</div><div class="td mono" style="background:#fbf0ee;color:#b5432f">6m</div><div class="td" style="background:#fbf0ee"><div class="bar" style="flex:1"><div class="barfill" style="width:34%;background:#cf5b4a"></div></div></div><div class="td" style="background:#fbf0ee"><span class="dot s-fail"></span><span style="color:#b5432f">Stalled</span></div>
+                <div class="td" style="background:#fbf0ee"><b>Ripley S01E03</b></div><div class="td mono" style="background:#fbf0ee;color:#8a857a">tv-shows</div><div class="td" style="background:#fbf0ee">Import</div><div class="td mono" style="background:#fbf0ee;color:#b5432f">4m</div><div class="td" style="background:#fbf0ee">—</div><div class="td" style="background:#fbf0ee"><span class="dot s-fail"></span><span style="color:#b5432f">Failed</span></div>
+                <div class="td"><b>Fallout S01E05</b></div><div class="td mono" style="color:#8a857a">tv-shows</div><div class="td">Transfer</div><div class="td mono" style="color:#8a857a">1m</div><div class="td"><div class="bar" style="flex:1"><div class="barfill" style="width:62%;background:#2fa39a"></div></div></div><div class="td"><span class="dot s-live"></span>62%</div>
+                <div class="td"><b>Furiosa</b></div><div class="td mono" style="color:#8a857a">movies</div><div class="td">Transfer</div><div class="td mono" style="color:#8a857a">2m</div><div class="td"><div class="bar" style="flex:1"><div class="barfill" style="width:88%;background:#2fa39a"></div></div></div><div class="td"><span class="dot s-live"></span>88%</div>
+                <div class="td"><b>Shogun S01E09</b></div><div class="td mono" style="color:#8a857a">tv-shows</div><div class="td">Download</div><div class="td mono" style="color:#8a857a">2m</div><div class="td"><div class="bar" style="flex:1"><div class="barfill" style="width:45%;background:#8b8f99"></div></div></div><div class="td"><span class="dot s-idle"></span>Waiting</div>
+                <div class="td"><b>Silo S02E04</b></div><div class="td mono" style="color:#8a857a">tv-shows</div><div class="td">Discover</div><div class="td mono" style="color:#8a857a">30s</div><div class="td">—</div><div class="td"><span class="dot s-idle"></span>Queued</div>
+                <div class="td"><b>Civil War</b></div><div class="td mono" style="color:#8a857a">movies</div><div class="td">Cleanup</div><div class="td mono" style="color:#8a857a">8s</div><div class="td">—</div><div class="td"><span class="dot s-ok"></span>Done</div>
+                <div class="td"><b>Dark Matter S01E08</b></div><div class="td mono" style="color:#8a857a">tv-shows</div><div class="td">Archival</div><div class="td mono" style="color:#8a857a">5s</div><div class="td">—</div><div class="td"><span class="dot s-ok"></span>Seeding</div>
+              </div>
+              <div style="padding:9px 12px;font-size:11px;color:#8a857a;border-top:1px solid #e4e0d6" class="mono">Sorted: stuck first · showing 50 of 200 · load more</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- mobile operate -->
+      <div class="frame" id="m1" style="width:360px">
+        <div class="cap"><span class="capid">M1</span><span class="captitle">Operate — mobile</span><span class="capstate">360px · rail scrolls horizontally</span></div>
+        <div style="background:#f8f5ee">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 14px;font-size:10px;color:#8a857a" class="mono"><span>9:41</span><span>▚ ▘ ▂ 84%</span></div>
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid #d6d2c8"><span class="beacon" style="width:18px;height:18px"></span><b style="font-size:15px">Operate</b><span style="margin-left:auto;font-size:16px;color:#77736a">≡</span></div>
+          <div style="padding:12px 14px">
+            <div style="display:flex;gap:12px;align-items:center;font-size:10px;margin-bottom:12px" class="mono">
+              <span style="color:#3f8a50"><span class="dot s-ok"></span> qBit</span><span style="color:#3f8a50"><span class="dot s-ok"></span> Sonarr</span><span style="color:#b5732a"><span class="dot s-warn"></span> Radarr</span><span style="color:#b5432f"><span class="dot s-fail"></span> SFTP</span>
+            </div>
+            <div class="eyebrow" style="margin-bottom:8px">Pipeline · swipe →</div>
+            <div style="display:flex;gap:8px;overflow:hidden;padding-bottom:8px;margin-bottom:14px;-webkit-mask-image:linear-gradient(90deg,#000 84%,transparent)">
+              <div style="flex:none;width:64px;text-align:center"><div style="width:38px;height:38px;margin:0 auto;border-radius:50%;border:2px solid #bdb8ac;background:#f4f1ea;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">4</div><div style="font-size:9.5px;color:#66625a;margin-top:4px">Discover</div></div>
+              <div style="flex:none;width:64px;text-align:center"><div style="width:38px;height:38px;margin:0 auto;border-radius:50%;border:2px solid #bdb8ac;background:#f4f1ea;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">6</div><div style="font-size:9.5px;color:#66625a;margin-top:4px">Download</div></div>
+              <div style="flex:none;width:64px;text-align:center;position:relative"><div style="width:42px;height:42px;margin:0 auto;border-radius:50%;border:2px solid #cf5b4a;background:#fbf0ee;box-shadow:0 0 0 3px rgba(207,91,74,.16);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px">12</div><span style="position:absolute;top:-4px;right:6px;background:#d98a2b;color:#fff;font-size:8px;font-weight:700;padding:1px 4px;border-radius:7px">2</span><div style="font-size:9.5px;color:#b5432f;font-weight:700;margin-top:4px">Transfer</div></div>
+              <div style="flex:none;width:64px;text-align:center"><div style="width:38px;height:38px;margin:0 auto;border-radius:50%;border:2px solid #bdb8ac;background:#f4f1ea;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">3</div><div style="font-size:9.5px;color:#66625a;margin-top:4px">Import</div></div>
+              <div style="flex:none;width:64px;text-align:center"><div style="width:38px;height:38px;margin:0 auto;border-radius:50%;border:2px solid #bdb8ac;background:#f4f1ea;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">1</div><div style="font-size:9.5px;color:#66625a;margin-top:4px">Cleanup</div></div>
+            </div>
+            <div class="eyebrow" style="margin-bottom:8px">Needs attention · 2</div>
+            <div class="attn fail" style="margin-bottom:8px"><b style="font-size:12px">Transfer stalled over SFTP</b><div class="mono" style="font-size:9.5px;color:#8a857a;margin-top:3px">rel_8fa3c19d · 0 B/s · 6m · retry 5/5</div><div style="display:flex;gap:6px;margin-top:7px"><span class="btn sm pri">Retry</span><span class="btn sm gho">Inspect</span></div></div>
+            <div class="attn fail"><b style="font-size:12px">Import failed — no match in Sonarr</b><div class="mono" style="font-size:9.5px;color:#8a857a;margin-top:3px">rel_2b71ee40 · Import · 4m</div><div style="display:flex;gap:6px;margin-top:7px"><span class="btn sm pri">Retry</span><span class="btn sm gho">Skip</span></div></div>
+          </div>
+          <div style="display:flex;border-top:1px solid #d6d2c8;font-size:9.5px;text-align:center">
+            <div style="flex:1;padding:9px 0;color:#b5732a;font-weight:700;border-top:2px solid #d98a2b;margin-top:-1px">Operate</div>
+            <div style="flex:1;padding:9px 0;color:#8a857a">Jobs</div>
+            <div style="flex:1;padding:9px 0;color:#8a857a">Connect</div>
+            <div style="flex:1;padding:9px 0;color:#8a857a">History</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- mobile connection form -->
+      <div class="frame" id="m2" style="width:360px">
+        <div class="cap"><span class="capid">M2</span><span class="captitle">Connection form — mobile</span><span class="capstate">SFTP · port error · secret set</span></div>
+        <div style="background:#f8f5ee">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 14px;font-size:10px;color:#8a857a" class="mono"><span>9:41</span><span>▚ ▘ ▂ 84%</span></div>
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid #d6d2c8"><span style="font-size:16px;color:#77736a">‹</span><b style="font-size:14px">Edit · Seedbox / SFTP</b></div>
+          <div style="padding:14px">
+            <div style="margin-bottom:10px"><span class="flab">Host</span><div class="input mono" style="font-size:10.5px"><span style="color:#2c2a26">seedbox.host</span></div></div>
+            <div style="margin-bottom:10px"><span class="flab">Port</span><div class="input err mono"><span style="color:#2c2a26">70000</span></div><div class="errmsg">Range 1–65535</div></div>
+            <div style="margin-bottom:10px"><span class="flab">Username</span><div class="input mono" style="font-size:10.5px"><span style="color:#2c2a26">operator</span></div></div>
+            <div style="margin-bottom:10px"><span class="flab">Password / key</span><div class="input"><span class="mono" style="color:#8a857a">•••••••• set</span><span class="btn sm gho">Replace</span></div><div style="font-size:10px;color:#8a857a;margin-top:4px">🔒 Write-only — never shown after save</div></div>
+            <div style="margin-bottom:14px"><span class="flab">Remote base path</span><div class="input mono" style="font-size:10px"><span style="color:#2c2a26">/mnt/seedbox/complete</span></div></div>
+            <span class="btn gho" style="width:100%;justify-content:center;margin-bottom:8px">⚡ Test connection</span>
+            <div class="pill" style="width:100%;justify-content:center;border-color:#e6a79b;background:#fbefec;color:#b5432f;margin-bottom:6px"><span class="dot s-fail"></span>Failed · auth denied (403)</div>
+          </div>
+          <div style="display:flex;gap:8px;padding:10px 14px;border-top:1px solid #d6d2c8;position:sticky;bottom:0;background:#f6f3ec"><span class="btn pri" style="flex:1;justify-content:center">Save</span><span class="btn gho" style="flex:1;justify-content:center">Cancel</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ (removed) old Dashboard + Pipeline rows — folded into Operate ============ -->
+  <div class="row" id="dash" style="display:none">
+    <div class="frames">
+
+      <!-- 5.1a healthy -->
+      <div class="frame" id="s51a" style="width:1000px">
+        <div class="cap"><span class="capid">5.1a</span><span class="captitle">Dashboard</span><span class="capstate">state · healthy / flowing</span></div>
+        <div class="app">
+          <div class="side">
+            <div class="brand"><span class="beacon"></span><span class="brandn">Harrbor</span></div>
+            <div class="nav act">Dashboard</div><div class="nav">Pipeline</div><div class="nav">Jobs</div><div class="nav">Connections</div><div class="nav">History</div><div class="nav">Logs</div>
+            <div class="tele mono">▚ throughput 42.8 MB/s<br>in-flight 12 · last-sync 3s<br>uptime 6d 04h</div>
+          </div>
+          <div style="flex:1">
+            <div class="top"><span class="toptitle">Dashboard</span><span class="badge" style="margin-left:auto">↻ auto 3s</span><span class="chip">⚙ Settings</span></div>
+            <div class="main">
+              <div class="eyebrow" style="margin-bottom:7px">Connection health</div>
+              <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-bottom:14px">
+                <div class="tile"><div style="display:flex;justify-content:space-between"><b style="font-size:12px">qBittorrent</b><span class="dot s-ok"></span></div><div style="font-size:11px;color:#66625a">Connected</div><div class="mono" style="font-size:10px;color:#8a857a">24ms · settings ›</div></div>
+                <div class="tile"><div style="display:flex;justify-content:space-between"><b style="font-size:12px">Sonarr</b><span class="dot s-ok"></span></div><div style="font-size:11px;color:#66625a">Connected</div><div class="mono" style="font-size:10px;color:#8a857a">31ms · settings ›</div></div>
+                <div class="tile"><div style="display:flex;justify-content:space-between"><b style="font-size:12px">Radarr</b><span class="dot s-ok"></span></div><div style="font-size:11px;color:#66625a">Connected</div><div class="mono" style="font-size:10px;color:#8a857a">28ms · settings ›</div></div>
+                <div class="tile"><div style="display:flex;justify-content:space-between"><b style="font-size:12px">Seedbox / SFTP</b><span class="dot s-ok"></span></div><div style="font-size:11px;color:#66625a">Connected</div><div class="mono" style="font-size:10px;color:#8a857a">handshake ok · 38ms</div></div>
+              </div>
+              <div class="tile" style="margin-bottom:14px">
+                <div class="eyebrow" style="margin-bottom:10px">Pipeline · 6 phases</div>
+                <div style="display:flex;align-items:flex-start">
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:80px"><div style="width:40px;height:40px;border-radius:50%;border:2px solid #bdb8ac;background:#f4f1ea;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px">4</div><span style="font-size:10.5px;color:#66625a">Discover</span></div>
+                  <div class="seg" style="margin-top:19px;height:3px;background:#d3cfc4"></div>
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:80px"><div style="width:40px;height:40px;border-radius:50%;border:2px solid #bdb8ac;background:#f4f1ea;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px">6</div><span style="font-size:10.5px;color:#66625a">Download</span></div>
+                  <div class="seg" style="margin-top:19px;height:3px;background:linear-gradient(90deg,#d3cfc4,#2fa39a)"></div>
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:80px"><div style="width:44px;height:44px;border-radius:50%;border:2px solid #d98a2b;background:#f6e6cd;box-shadow:0 0 0 4px rgba(217,138,43,.18);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px">12</div><span style="font-size:10.5px;color:#b5732a;font-weight:700">Transfer ●</span></div>
+                  <div class="seg" style="margin-top:19px;height:3px;background:linear-gradient(90deg,#2fa39a,#d3cfc4)"></div>
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:80px"><div style="width:40px;height:40px;border-radius:50%;border:2px solid #bdb8ac;background:#f4f1ea;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px">3</div><span style="font-size:10.5px;color:#66625a">Import</span></div>
+                  <div class="seg" style="margin-top:19px;height:3px;background:#d3cfc4"></div>
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:80px"><div style="width:40px;height:40px;border-radius:50%;border:2px solid #bdb8ac;background:#f4f1ea;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px">1</div><span style="font-size:10.5px;color:#66625a">Cleanup</span></div>
+                  <div class="seg" style="margin-top:19px;height:3px;background:#d3cfc4"></div>
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:80px"><div style="width:40px;height:40px;border-radius:50%;border:2px solid #bdb8ac;background:#f4f1ea;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px">2</div><span style="font-size:10.5px;color:#66625a">Archival</span></div>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:12px">
+                <div class="tile">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div class="eyebrow">Needs attention</div><span class="pill"><span class="dot s-ok"></span>All clear</span></div>
+                  <div class="dash" style="height:66px">Nothing failed, retrying, or timed out<br>— healthy path</div>
+                </div>
+                <div class="tile">
+                  <div class="eyebrow" style="margin-bottom:8px">Jobs</div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;font-size:11.5px;padding:5px 0;border-bottom:1px solid #e4e0d6"><span><span class="tgl" style="display:inline-block;vertical-align:-3px;margin-right:6px"></span><b>tv-shows</b></span><span class="mono" style="color:#8a857a">8 items · next 42s</span></div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;font-size:11.5px;padding:5px 0"><span><span class="tgl" style="display:inline-block;vertical-align:-3px;margin-right:6px"></span><b>movies</b></span><span class="mono" style="color:#8a857a">3 items · next 1m 10s</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5.1b error/degraded -->
+      <div class="frame" id="s51b" style="width:1000px">
+        <div class="cap"><span class="capid">5.1b</span><span class="captitle">Dashboard</span><span class="capstate">state · degraded / stuck</span></div>
+        <div class="app">
+          <div class="side">
+            <div class="brand"><span class="beacon"></span><span class="brandn">Harrbor</span></div>
+            <div class="nav act">Dashboard</div><div class="nav">Pipeline</div><div class="nav">Jobs</div><div class="nav">Connections</div><div class="nav">History</div><div class="nav">Logs</div>
+            <div class="tele mono">▚ throughput 0 B/s<br>in-flight 2 stalled · last-sync 3s<br>uptime 6d 04h</div>
+          </div>
+          <div style="flex:1">
+            <div class="top"><span class="toptitle">Dashboard</span><span class="pill" style="margin-left:auto;border-color:#e6a79b;background:#fbefec;color:#b5432f"><span class="dot s-fail"></span>1 connection down</span><span class="chip">⚙</span></div>
+            <div class="main">
+              <div class="eyebrow" style="margin-bottom:7px">Connection health</div>
+              <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-bottom:14px">
+                <div class="tile"><div style="display:flex;justify-content:space-between"><b style="font-size:12px">qBittorrent</b><span class="dot s-ok"></span></div><div style="font-size:11px;color:#66625a">Connected</div><div class="mono" style="font-size:10px;color:#8a857a">24ms</div></div>
+                <div class="tile"><div style="display:flex;justify-content:space-between"><b style="font-size:12px">Sonarr</b><span class="dot s-ok"></span></div><div style="font-size:11px;color:#66625a">Connected</div><div class="mono" style="font-size:10px;color:#8a857a">31ms</div></div>
+                <div class="tile"><div style="display:flex;justify-content:space-between"><b style="font-size:12px">Radarr</b><span class="dot s-warn"></span></div><div style="font-size:11px;color:#b5732a">Degraded</div><div class="mono" style="font-size:10px;color:#8a857a">480ms</div></div>
+                <div class="tile" style="border-color:#e6a79b;background:#fbefec"><div style="display:flex;justify-content:space-between"><b style="font-size:12px">Seedbox / SFTP</b><span class="dot s-fail"></span></div><div style="font-size:11px;color:#b5432f">Offline</div><div class="mono" style="font-size:10px;color:#b5432f">ECONNREFUSED · fix ›</div></div>
+              </div>
+              <div class="tile" style="margin-bottom:14px">
+                <div class="eyebrow" style="margin-bottom:10px">Pipeline · 6 phases</div>
+                <div style="display:flex;align-items:flex-start">
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:80px"><div style="width:40px;height:40px;border-radius:50%;border:2px solid #bdb8ac;background:#f4f1ea;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px">4</div><span style="font-size:10.5px;color:#66625a">Discover</span></div>
+                  <div class="seg" style="margin-top:19px;height:3px;background:#d3cfc4"></div>
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:80px"><div style="width:40px;height:40px;border-radius:50%;border:2px solid #bdb8ac;background:#f4f1ea;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px">6</div><span style="font-size:10.5px;color:#66625a">Download</span></div>
+                  <div class="seg" style="margin-top:19px;height:3px;background:#d3cfc4"></div>
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:80px;position:relative"><div style="width:44px;height:44px;border-radius:50%;border:2px solid #cf5b4a;background:#fbf0ee;box-shadow:0 0 0 4px rgba(207,91,74,.16);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px">10</div><span style="position:absolute;top:-6px;right:8px;background:#d98a2b;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px">2 stuck</span><span style="font-size:10.5px;color:#b5432f;font-weight:700">Transfer ✕</span></div>
+                  <div class="seg" style="margin-top:19px;height:3px;background:#d3cfc4"></div>
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:80px"><div style="width:40px;height:40px;border-radius:50%;border:2px solid #bdb8ac;background:#f4f1ea;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px">3</div><span style="font-size:10.5px;color:#66625a">Import</span></div>
+                  <div class="seg" style="margin-top:19px;height:3px;background:#d3cfc4"></div>
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:80px"><div style="width:40px;height:40px;border-radius:50%;border:2px solid #bdb8ac;background:#f4f1ea;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px">1</div><span style="font-size:10.5px;color:#66625a">Cleanup</span></div>
+                  <div class="seg" style="margin-top:19px;height:3px;background:#d3cfc4"></div>
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:80px"><div style="width:40px;height:40px;border-radius:50%;border:2px solid #bdb8ac;background:#f4f1ea;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px">2</div><span style="font-size:10.5px;color:#66625a">Archival</span></div>
+                </div>
+              </div>
+              <div class="eyebrow" style="margin-bottom:8px">Needs attention · 3</div>
+              <div class="attn fail"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div><b style="font-size:12.5px">Transfer stalled over SFTP (0 B/s for 6m)</b><div class="mono" style="font-size:10px;color:#8a857a;margin-top:3px">rel_8fa3c19d · Transfer · retry 5/5 · 6m ago</div></div><div style="display:flex;gap:6px"><span class="btn sm pri">Retry</span><span class="btn sm gho">Inspect</span></div></div></div>
+              <div class="attn fail"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div><b style="font-size:12.5px">Import failed — no matching series in Sonarr</b><div class="mono" style="font-size:10px;color:#8a857a;margin-top:3px">rel_2b71ee40 · Import · 4m ago</div></div><div style="display:flex;gap:6px"><span class="btn sm pri">Retry</span><span class="btn sm gho">Skip</span></div></div></div>
+              <div class="attn"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div><b style="font-size:12.5px">Connection unreachable — Seedbox / SFTP</b><div class="mono" style="font-size:10px;color:#8a857a;margin-top:3px">sftp · ECONNREFUSED · blocks all transfers</div></div><div style="display:flex;gap:6px"><span class="btn sm pri">Open settings</span></div></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ 5.2 PIPELINE (retired — folded into Operate) ============ -->
+  <div class="row" id="pipe" style="display:none">
+    <div class="rowhead"><span class="rowtag">5.2</span><span class="rowtitle">Pipeline / Active queue</span><span class="rownote">Board vs table — both shown to compare · <span class="note">recommendation → toggle, board default</span></span></div>
+    <div class="frames">
+
+      <!-- 5.2a board healthy -->
+      <div class="frame" id="s52a" style="width:1040px">
+        <div class="cap"><span class="capid">5.2a</span><span class="captitle">Pipeline — board (Kanban)</span><span class="capstate">state · healthy / flowing</span></div>
+        <div class="app">
+          <div class="side">
+            <div class="brand"><span class="beacon"></span><span class="brandn">Harrbor</span></div>
+            <div class="nav">Dashboard</div><div class="nav act">Pipeline</div><div class="nav">Jobs</div><div class="nav">Connections</div><div class="nav">History</div><div class="nav">Logs</div>
+            <div class="tele mono">▚ 42.8 MB/s · 12 in-flight<br>last-sync 3s</div>
+          </div>
+          <div style="flex:1">
+            <div class="top"><span class="toptitle">Pipeline</span>
+              <span style="margin-left:14px;display:flex;border:1.4px solid #c6c1b6;border-radius:6px;overflow:hidden;font-size:11.5px"><span style="padding:4px 11px;background:#e59a34;color:#3a2a0e;font-weight:700">Board</span><span style="padding:4px 11px;color:#77736a">Table</span></span>
+              <span class="chip" style="margin-left:auto">Job: all ▾</span><span class="chip">Phase: all ▾</span><span class="chip">Status: all ▾</span>
+            </div>
+            <div class="main" style="display:flex;gap:8px;padding:12px">
+              <div class="col"><div class="coltop" style="border-top-color:#6b7a99"><span style="font-size:11px;font-weight:700">Discover</span><span class="badge">4</span></div>
+                <div class="rcard"><b>Silo S02E04</b><div class="mono" style="color:#8a857a;font-size:9.5px">tv-shows · 30s</div></div>
+                <div class="rcard"><b>Dune Part Two</b><div class="mono" style="color:#8a857a;font-size:9.5px">movies · 1m</div></div>
+              </div>
+              <div class="col"><div class="coltop" style="border-top-color:#3aa0c9"><span style="font-size:11px;font-weight:700">Download</span><span class="badge">6</span></div>
+                <div class="rcard"><b>The Bear S03E06</b><div class="mono" style="color:#8a857a;font-size:9.5px">tv-shows · 4m</div><div class="bar" style="margin-top:4px"><div class="barfill" style="width:80%;background:#8b8f99"></div></div></div>
+                <div class="rcard"><b>Shogun S01E09</b><div class="mono" style="color:#8a857a;font-size:9.5px">tv-shows · 2m</div><div class="bar" style="margin-top:4px"><div class="barfill" style="width:45%;background:#8b8f99"></div></div></div>
+              </div>
+              <div class="col" style="background:#f6efe4"><div class="coltop" style="border-top-color:#2fa39a"><span style="font-size:11px;font-weight:700">Transfer <span class="dot s-live" style="vertical-align:1px"></span></span><span class="badge">12</span></div>
+                <div class="rcard" style="border-color:#8fd0c9"><b>Fallout S01E05</b><div class="mono" style="color:#2f8a83;font-size:9.5px">tv-shows · 62% · 4.2 MB/s</div><div class="bar" style="margin-top:4px"><div class="barfill" style="width:62%;background:#2fa39a"></div></div></div>
+                <div class="rcard" style="border-color:#8fd0c9"><b>Furiosa</b><div class="mono" style="color:#2f8a83;font-size:9.5px">movies · 88% · 6.1 MB/s</div><div class="bar" style="margin-top:4px"><div class="barfill" style="width:88%;background:#2fa39a"></div></div></div>
+              </div>
+              <div class="col"><div class="coltop" style="border-top-color:#4d9a5c"><span style="font-size:11px;font-weight:700">Import</span><span class="badge">3</span></div>
+                <div class="rcard"><b>Ripley S01E03</b><div class="mono" style="color:#8a857a;font-size:9.5px">tv-shows · 20s</div></div>
+              </div>
+              <div class="col"><div class="coltop" style="border-top-color:#cf9b3a"><span style="font-size:11px;font-weight:700">Cleanup</span><span class="badge">1</span></div>
+                <div class="rcard"><b>Civil War</b><div class="mono" style="color:#8a857a;font-size:9.5px">movies · 8s</div></div>
+              </div>
+              <div class="col"><div class="coltop" style="border-top-color:#8a6bc9"><span style="font-size:11px;font-weight:700">Archival</span><span class="badge">2</span></div>
+                <div class="rcard"><b>Dark Matter S01E08</b><div class="mono" style="color:#8a857a;font-size:9.5px">seeding · ratio 1.4</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5.2b board stuck -->
+      <div class="frame" id="s52b" style="width:1040px">
+        <div class="cap"><span class="capid">5.2b</span><span class="captitle">Pipeline — board</span><span class="capstate">state · error / stuck</span></div>
+        <div class="app">
+          <div class="side">
+            <div class="brand"><span class="beacon"></span><span class="brandn">Harrbor</span></div>
+            <div class="nav">Dashboard</div><div class="nav act">Pipeline</div><div class="nav">Jobs</div><div class="nav">Connections</div><div class="nav">History</div><div class="nav">Logs</div>
+            <div class="tele mono">▚ 0 B/s · 2 stalled<br>last-sync 3s</div>
+          </div>
+          <div style="flex:1">
+            <div class="top"><span class="toptitle">Pipeline</span>
+              <span style="margin-left:14px;display:flex;border:1.4px solid #c6c1b6;border-radius:6px;overflow:hidden;font-size:11.5px"><span style="padding:4px 11px;background:#e59a34;color:#3a2a0e;font-weight:700">Board</span><span style="padding:4px 11px;color:#77736a">Table</span></span>
+              <span class="pill" style="margin-left:auto;border-color:#e6a79b;background:#fbefec;color:#b5432f"><span class="dot s-fail"></span>Status: needs attention ▾</span>
+            </div>
+            <div class="main" style="display:flex;gap:8px;padding:12px">
+              <div class="col"><div class="coltop" style="border-top-color:#6b7a99"><span style="font-size:11px;font-weight:700">Discover</span><span class="badge">4</span></div><div class="dash" style="height:40px">…</div></div>
+              <div class="col"><div class="coltop" style="border-top-color:#3aa0c9"><span style="font-size:11px;font-weight:700">Download</span><span class="badge">5</span></div><div class="dash" style="height:40px">…</div></div>
+              <div class="col" style="background:#faf0ee"><div class="coltop" style="border-top-color:#cf5b4a"><span style="font-size:11px;font-weight:700;color:#b5432f">Transfer</span><span class="badge" style="border-color:#e6a79b;color:#b5432f">2 ✕</span></div>
+                <div class="rcard stuck"><b>The Bear S03E06</b><div class="mono" style="color:#b5432f;font-size:9.5px">stalled · 0 B/s · 6m</div><div class="mono" style="color:#8a857a;font-size:9px">retry 5/5 exhausted</div><div style="display:flex;gap:5px;margin-top:5px"><span class="btn sm pri">Retry</span><span class="btn sm gho">Inspect</span></div></div>
+                <div class="rcard stuck"><b>Alien Romulus</b><div class="mono" style="color:#b5432f;font-size:9.5px">stalled · 0 B/s · 3m</div><div class="mono" style="color:#8a857a;font-size:9px">retry 2/5 · next 40s</div></div>
+              </div>
+              <div class="col"><div class="coltop" style="border-top-color:#4d9a5c"><span style="font-size:11px;font-weight:700">Import</span><span class="badge" style="border-color:#e6a79b;color:#b5432f">1 ✕</span></div>
+                <div class="rcard stuck"><b>Ripley S01E03</b><div class="mono" style="color:#b5432f;font-size:9.5px">import failed · timeout</div><div style="display:flex;gap:5px;margin-top:5px"><span class="btn sm pri">Retry</span></div></div>
+              </div>
+              <div class="col"><div class="coltop" style="border-top-color:#cf9b3a"><span style="font-size:11px;font-weight:700">Cleanup</span><span class="badge">1</span></div><div class="dash" style="height:40px">…</div></div>
+              <div class="col"><div class="coltop" style="border-top-color:#8a6bc9"><span style="font-size:11px;font-weight:700">Archival</span><span class="badge">2</span></div><div class="dash" style="height:40px">…</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5.2c table dense -->
+      <div class="frame" id="s52c" style="width:1040px">
+        <div class="cap"><span class="capid">5.2c</span><span class="captitle">Pipeline — table</span><span class="capstate">state · dense (200 releases)</span></div>
+        <div class="app">
+          <div class="side">
+            <div class="brand"><span class="beacon"></span><span class="brandn">Harrbor</span></div>
+            <div class="nav">Dashboard</div><div class="nav act">Pipeline</div><div class="nav">Jobs</div><div class="nav">Connections</div><div class="nav">History</div><div class="nav">Logs</div>
+            <div class="tele mono">▚ 42.8 MB/s · 12 in-flight</div>
+          </div>
+          <div style="flex:1">
+            <div class="top"><span class="toptitle">Pipeline</span>
+              <span style="margin-left:14px;display:flex;border:1.4px solid #c6c1b6;border-radius:6px;overflow:hidden;font-size:11.5px"><span style="padding:4px 11px;color:#77736a">Board</span><span style="padding:4px 11px;background:#e59a34;color:#3a2a0e;font-weight:700">Table</span></span>
+              <span class="input" style="margin-left:auto;width:150px">🔍 search title…</span><span class="chip">Job ▾</span><span class="chip">Phase ▾</span><span class="chip">Status ▾</span>
+            </div>
+            <div class="main" style="padding:0">
+              <div class="tgrid" style="grid-template-columns:2.4fr 1fr 1fr 0.9fr 1.3fr 1fr">
+                <div class="th">Title</div><div class="th">Job</div><div class="th">Phase</div><div class="th">In phase</div><div class="th">Progress</div><div class="th">Status</div>
+                <div class="td" style="background:#fbf0ee"><b>The Bear S03E06</b></div><div class="td mono" style="background:#fbf0ee;color:#8a857a">tv-shows</div><div class="td" style="background:#fbf0ee">Transfer</div><div class="td mono" style="background:#fbf0ee;color:#b5432f">6m</div><div class="td" style="background:#fbf0ee"><div class="bar" style="flex:1"><div class="barfill" style="width:34%;background:#cf5b4a"></div></div></div><div class="td" style="background:#fbf0ee"><span class="dot s-fail"></span><span style="color:#b5432f">Stalled</span></div>
+                <div class="td" style="background:#fbf0ee"><b>Ripley S01E03</b></div><div class="td mono" style="background:#fbf0ee;color:#8a857a">tv-shows</div><div class="td" style="background:#fbf0ee">Import</div><div class="td mono" style="background:#fbf0ee;color:#b5432f">4m</div><div class="td" style="background:#fbf0ee">—</div><div class="td" style="background:#fbf0ee"><span class="dot s-fail"></span><span style="color:#b5432f">Failed</span></div>
+                <div class="td"><b>Fallout S01E05</b></div><div class="td mono" style="color:#8a857a">tv-shows</div><div class="td">Transfer</div><div class="td mono" style="color:#8a857a">1m</div><div class="td"><div class="bar" style="flex:1"><div class="barfill" style="width:62%;background:#2fa39a"></div></div></div><div class="td"><span class="dot s-live"></span>62%</div>
+                <div class="td"><b>Furiosa</b></div><div class="td mono" style="color:#8a857a">movies</div><div class="td">Transfer</div><div class="td mono" style="color:#8a857a">2m</div><div class="td"><div class="bar" style="flex:1"><div class="barfill" style="width:88%;background:#2fa39a"></div></div></div><div class="td"><span class="dot s-live"></span>88%</div>
+                <div class="td"><b>Shogun S01E09</b></div><div class="td mono" style="color:#8a857a">tv-shows</div><div class="td">Download</div><div class="td mono" style="color:#8a857a">2m</div><div class="td"><div class="bar" style="flex:1"><div class="barfill" style="width:45%;background:#8b8f99"></div></div></div><div class="td"><span class="dot s-idle"></span>Waiting</div>
+                <div class="td"><b>Silo S02E04</b></div><div class="td mono" style="color:#8a857a">tv-shows</div><div class="td">Discover</div><div class="td mono" style="color:#8a857a">30s</div><div class="td">—</div><div class="td"><span class="dot s-idle"></span>Queued</div>
+                <div class="td"><b>Civil War</b></div><div class="td mono" style="color:#8a857a">movies</div><div class="td">Cleanup</div><div class="td mono" style="color:#8a857a">8s</div><div class="td">—</div><div class="td"><span class="dot s-ok"></span>Done</div>
+                <div class="td"><b>Dark Matter S01E08</b></div><div class="td mono" style="color:#8a857a">tv-shows</div><div class="td">Archival</div><div class="td mono" style="color:#8a857a">5s</div><div class="td">—</div><div class="td"><span class="dot s-ok"></span>Seeding</div>
+              </div>
+              <div style="padding:9px 12px;font-size:11px;color:#8a857a;border-top:1px solid #e4e0d6" class="mono">Sorted: stuck first · showing 50 of 200 · load more</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ 5.3 RELEASE DETAIL ============ -->
+  <div class="row" id="detail">
+    <div class="rowhead"><span class="rowtag">5.3</span><span class="rowtitle">Release detail</span><span class="rownote">Phase timeline · transfer detail · scoped log · actions</span></div>
+    <div class="frames">
+
+      <!-- 5.3a flowing -->
+      <div class="frame" id="s53a" style="width:620px">
+        <div class="cap"><span class="capid">5.3a</span><span class="captitle">Release detail</span><span class="capstate">state · transferring</span></div>
+        <div style="padding:16px">
+          <div class="mono" style="font-size:10.5px;color:#8a857a;margin-bottom:6px">Pipeline / <span style="color:#b5732a">rel_8fa3c19d</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+            <div><div style="font-size:18px;font-weight:700">Fallout S01E05</div><div style="margin-top:4px;display:flex;gap:6px"><span class="badge">tv-shows</span><span class="badge">4.31 GB</span><span class="badge">x265</span></div></div>
+            <div style="display:flex;gap:6px"><span class="btn sm pri">Retry</span><span class="btn sm gho">Cancel</span><span class="btn sm gho">Force ▸</span></div>
+          </div>
+          <div class="eyebrow" style="margin-bottom:8px">Phase timeline</div>
+          <div style="display:flex;flex-direction:column;gap:0;margin-bottom:14px;padding-left:4px">
+            <div style="display:flex;gap:10px;align-items:center"><span class="dot s-ok" style="width:12px;height:12px"></span><b style="font-size:12px;width:74px">Discover</b><span class="mono" style="font-size:10px;color:#8a857a">done · 12:04:10</span></div>
+            <div style="height:14px;border-left:2px solid #cdd9d0;margin-left:5px"></div>
+            <div style="display:flex;gap:10px;align-items:center"><span class="dot s-ok" style="width:12px;height:12px"></span><b style="font-size:12px;width:74px">Download</b><span class="mono" style="font-size:10px;color:#8a857a">done · 12:18:44</span></div>
+            <div style="height:14px;border-left:2px solid #d98a2b;margin-left:5px"></div>
+            <div style="display:flex;gap:10px;align-items:center"><span class="dot s-live" style="width:12px;height:12px"></span><b style="font-size:12px;width:74px;color:#b5732a">Transfer</b><span class="mono" style="font-size:10px;color:#2f8a83">62% · 4.2 MB/s · started 12:19</span></div>
+            <div style="margin:5px 0 5px 22px"><div class="bar" style="width:70%"><div class="barfill" style="width:62%;background:#2fa39a"></div></div></div>
+            <div style="height:10px;border-left:2px dashed #d6d2c8;margin-left:5px"></div>
+            <div style="display:flex;gap:10px;align-items:center"><span class="dot s-idle" style="width:12px;height:12px;background:#d6d2c8"></span><span style="font-size:12px;width:74px;color:#a09b8f">Import</span></div>
+            <div style="height:10px;border-left:2px dashed #d6d2c8;margin-left:5px"></div>
+            <div style="display:flex;gap:10px;align-items:center"><span class="dot s-idle" style="width:12px;height:12px;background:#d6d2c8"></span><span style="font-size:12px;width:74px;color:#a09b8f">Cleanup</span></div>
+            <div style="height:10px;border-left:2px dashed #d6d2c8;margin-left:5px"></div>
+            <div style="display:flex;gap:10px;align-items:center"><span class="dot s-idle" style="width:12px;height:12px;background:#d6d2c8"></span><span style="font-size:12px;width:74px;color:#a09b8f">Archival</span></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+            <div class="tile"><div class="eyebrow" style="margin-bottom:6px">Transfer</div><div class="mono" style="font-size:10.5px;color:#66625a;line-height:1.7">files 8 · 4.31 GB<br>speed 4.2 MB/s · eta 6m<br>retry 0/5</div></div>
+            <div class="tile"><div class="eyebrow" style="margin-bottom:6px">Path</div><div class="mono" style="font-size:9.5px;color:#66625a;word-break:break-all;line-height:1.6">/mnt/seedbox/complete/<br>tv-shows/fallout.s01e05/</div></div>
+          </div>
+          <div class="eyebrow" style="margin-bottom:6px">Log · scoped to release</div>
+          <div class="mono" style="font-size:9.5px;background:#23262b;color:#c7cdd4;border-radius:6px;padding:9px 11px;line-height:1.7">12:19:02 <span style="color:#7f8892">INFO</span> sftp handshake ok · 38ms<br>12:19:03 <span style="color:#7f8892">INFO</span> transfer started · 8 files<br>12:22:41 <span style="color:#7f8892">INFO</span> 62% · 4.2 MB/s</div>
+        </div>
+      </div>
+
+      <!-- 5.3b stuck -->
+      <div class="frame" id="s53b" style="width:620px">
+        <div class="cap"><span class="capid">5.3b</span><span class="captitle">Release detail</span><span class="capstate">state · stuck / retries exhausted</span></div>
+        <div style="padding:16px">
+          <div class="mono" style="font-size:10.5px;color:#8a857a;margin-bottom:6px">Pipeline / <span style="color:#b5432f">rel_8fa3c19d</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+            <div><div style="font-size:18px;font-weight:700">The Bear S03E06</div><div style="margin-top:4px;display:flex;gap:6px"><span class="badge">tv-shows</span><span class="badge">3.02 GB</span><span class="badge">x265</span></div></div>
+            <div style="display:flex;gap:6px"><span class="btn sm pri">Retry</span><span class="btn sm gho">Skip phase</span><span class="btn sm gho">Cancel</span></div>
+          </div>
+          <div class="attn fail" style="margin-bottom:14px"><b style="font-size:13px">Transfer stalled over SFTP — 0 B/s for 6m</b><div class="mono" style="font-size:10px;color:#8a857a;margin-top:4px">Retries exhausted (5/5) · last error ECONNRESET · SFTP host unreachable</div></div>
+          <div class="eyebrow" style="margin-bottom:8px">Phase timeline</div>
+          <div style="display:flex;flex-direction:column;margin-bottom:14px;padding-left:4px">
+            <div style="display:flex;gap:10px;align-items:center"><span class="dot s-ok" style="width:12px;height:12px"></span><b style="font-size:12px;width:74px">Discover</b><span class="mono" style="font-size:10px;color:#8a857a">done · 11:40</span></div>
+            <div style="height:12px;border-left:2px solid #cdd9d0;margin-left:5px"></div>
+            <div style="display:flex;gap:10px;align-items:center"><span class="dot s-ok" style="width:12px;height:12px"></span><b style="font-size:12px;width:74px">Download</b><span class="mono" style="font-size:10px;color:#8a857a">done · 11:58</span></div>
+            <div style="height:12px;border-left:2px solid #cf5b4a;margin-left:5px"></div>
+            <div style="display:flex;gap:10px;align-items:center"><span class="dot s-fail" style="width:12px;height:12px"></span><b style="font-size:12px;width:74px;color:#b5432f">Transfer ✕</b><span class="mono" style="font-size:10px;color:#b5432f">failed · retry 5/5 · next —</span></div>
+            <div style="height:12px;border-left:2px dashed #d6d2c8;margin-left:5px"></div>
+            <div style="display:flex;gap:10px;align-items:center"><span class="dot s-idle" style="width:12px;height:12px;background:#d6d2c8"></span><span style="font-size:12px;width:74px;color:#a09b8f">Import</span><span style="font-size:10px;color:#c0bcb1">blocked</span></div>
+            <div style="height:10px;border-left:2px dashed #d6d2c8;margin-left:5px"></div>
+            <div style="display:flex;gap:10px;align-items:center"><span class="dot s-idle" style="width:12px;height:12px;background:#d6d2c8"></span><span style="font-size:12px;width:74px;color:#a09b8f">Cleanup</span></div>
+            <div style="height:10px;border-left:2px dashed #d6d2c8;margin-left:5px"></div>
+            <div style="display:flex;gap:10px;align-items:center"><span class="dot s-idle" style="width:12px;height:12px;background:#d6d2c8"></span><span style="font-size:12px;width:74px;color:#a09b8f">Archival</span></div>
+          </div>
+          <div class="eyebrow" style="margin-bottom:6px">Log · scoped to release</div>
+          <div class="mono" style="font-size:9.5px;background:#23262b;color:#c7cdd4;border-radius:6px;padding:9px 11px;line-height:1.7">12:14 <span style="color:#e0a06a">WARN</span> speed 0 B/s for 60s<br>12:18 <span style="color:#e0796a">ERROR</span> ECONNRESET · retry 4/5<br>12:20 <span style="color:#e0796a">ERROR</span> ECONNRESET · retries exhausted</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ 5.4 JOBS ============ -->
+  <div class="row" id="jobs">
+    <div class="rowhead"><span class="rowtag">5.4</span><span class="rowtitle">Jobs — list &amp; editor</span><span class="rownote">Full CRUD · clone is first-class · dirty state + validation</span></div>
+    <div class="frames">
+
+      <!-- 5.4a list -->
+      <div class="frame" id="s54a" style="width:760px">
+        <div class="cap"><span class="capid">5.4a</span><span class="captitle">Jobs list</span><span class="capstate">edit · clone · delete</span></div>
+        <div style="padding:16px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><div style="font-size:16px;font-weight:700">Jobs</div><span class="btn pri sm">＋ New job</span></div>
+          <div class="tgrid" style="grid-template-columns:1.4fr 0.7fr 1fr 0.9fr 0.7fr 1fr 1fr;border:1px solid #e4e0d6;border-radius:8px;overflow:hidden">
+            <div class="th">Name</div><div class="th">Enabled</div><div class="th">Category</div><div class="th">Interval</div><div class="th">Items</div><div class="th">Next run</div><div class="th">Actions</div>
+            <div class="td"><b>tv-shows</b></div><div class="td"><span class="tgl"></span></div><div class="td mono" style="color:#8a857a">tv-sonarr</div><div class="td mono" style="color:#8a857a">60s</div><div class="td mono">8</div><div class="td mono" style="color:#8a857a">42s</div><div class="td" style="gap:8px;color:#8a857a">Edit · Clone · Del</div>
+            <div class="td"><b>movies</b></div><div class="td"><span class="tgl"></span></div><div class="td mono" style="color:#8a857a">radarr-hd</div><div class="td mono" style="color:#8a857a">120s</div><div class="td mono">3</div><div class="td mono" style="color:#8a857a">1m 10s</div><div class="td" style="gap:8px;color:#8a857a">Edit · Clone · Del</div>
+            <div class="td" style="opacity:.6"><b>anime</b></div><div class="td"><span class="tgl off"></span></div><div class="td mono" style="color:#8a857a">anime-sonarr</div><div class="td mono" style="color:#8a857a">90s</div><div class="td mono">0</div><div class="td" style="color:#a09b8f">disabled</div><div class="td" style="gap:8px;color:#8a857a">Edit · Clone · Del</div>
+            <div class="td"><b>4k-movies</b><span class="dot s-fail" style="margin-left:4px"></span></div><div class="td"><span class="tgl"></span></div><div class="td mono" style="color:#8a857a">radarr-4k</div><div class="td mono" style="color:#8a857a">300s</div><div class="td mono">1</div><div class="td mono" style="color:#b5432f">SFTP down</div><div class="td" style="gap:8px;color:#8a857a">Edit · Clone · Del</div>
+          </div>
+          <div class="note" style="margin-top:10px">⚠ 4k-movies references Seedbox/SFTP, which is offline — row flags the unhealthy connection.</div>
+        </div>
+      </div>
+
+      <!-- 5.4b editor -->
+      <div class="frame" id="s54b" style="width:620px">
+        <div class="cap"><span class="capid">5.4b</span><span class="captitle">Job editor</span><span class="capstate">state · editing / dirty + validation error</span></div>
+        <div style="padding:16px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div class="mono" style="font-size:10.5px;color:#8a857a">Jobs / Edit — tv-shows</div><span class="pill" style="border-color:#e6b98f;background:#fbf3e8;color:#b5732a"><span class="dot s-warn"></span>Unsaved changes</span></div>
+          <div class="eyebrow" style="margin:12px 0 8px">Basics</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+            <div><span class="flab">Name</span><div class="input"><span style="color:#2c2a26">tv-shows</span></div></div>
+            <div><span class="flab">Watched category</span><div class="input"><span style="color:#2c2a26">tv-sonarr</span><span>▾</span></div></div>
+            <div><span class="flab">Enabled</span><div style="display:flex;align-items:center;gap:8px;height:30px"><span class="tgl"></span><span style="font-size:11.5px;color:#66625a">On</span></div></div>
+            <div><span class="flab">Polling interval (s)</span><div class="input err"><span style="color:#2c2a26">5</span></div><div class="errmsg">Must be 10–3600s</div></div>
+          </div>
+          <div class="eyebrow" style="margin:14px 0 8px">Transfer &amp; retry</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+            <div><span class="flab">Max concurrent transfers</span><div class="input"><span style="color:#2c2a26">3</span></div></div>
+            <div><span class="flab">Bandwidth cap</span><div class="input"><span style="color:#66625a">unlimited</span></div></div>
+            <div><span class="flab">Max retries</span><div class="input"><span style="color:#2c2a26">5</span></div></div>
+            <div><span class="flab">Backoff</span><div class="input"><span style="color:#2c2a26">exponential</span><span>▾</span></div></div>
+          </div>
+          <div class="eyebrow" style="margin:14px 0 8px">Paths</div>
+          <div style="margin-bottom:6px"><span class="flab">Staging path</span><div class="input mono" style="font-size:10px"><span style="color:#2c2a26">/mnt/staging/tv-shows</span></div></div>
+          <div style="margin-bottom:12px"><span class="flab">Destination path</span><div class="input mono" style="font-size:10px"><span style="color:#2c2a26">/mnt/media/tv</span></div></div>
+          <div class="eyebrow" style="margin-bottom:6px">Connections used</div>
+          <div style="display:flex;gap:6px;margin-bottom:14px"><span class="pill"><span class="dot s-ok"></span>qBittorrent</span><span class="pill"><span class="dot s-ok"></span>Sonarr</span><span class="pill" style="border-color:#e6a79b;background:#fbefec;color:#b5432f"><span class="dot s-fail"></span>SFTP offline</span></div>
+          <div style="display:flex;align-items:center;gap:10px;border-top:1px solid #e4e0d6;padding-top:12px"><span class="btn pri">Save</span><span class="btn gho">Cancel</span><span class="note" style="margin-left:auto;color:#8a857a">ⓘ Applies on next poll</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ 5.5 CONNECTIONS ============ -->
+  <div class="row" id="conn">
+    <div class="rowhead"><span class="rowtag">5.5</span><span class="rowtitle">Connections / Settings</span><span class="rownote">Test-before-save · write-only secrets · live health</span></div>
+    <div class="frames">
+
+      <!-- 5.5a list -->
+      <div class="frame" id="s55a" style="width:640px">
+        <div class="cap"><span class="capid">5.5a</span><span class="captitle">Connections list</span><span class="capstate">live health per connection</span></div>
+        <div style="padding:16px">
+          <div style="font-size:16px;font-weight:700;margin-bottom:12px">Connections</div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div class="tile" style="display:flex;align-items:center;gap:12px"><span class="dot s-ok"></span><div style="flex:1"><b style="font-size:12.5px">qBittorrent</b><div class="mono" style="font-size:10px;color:#8a857a">https://seedbox.host:8080</div></div><span class="mono" style="font-size:10.5px;color:#3f8a50">Connected · 24ms</span><span class="btn sm gho">Test</span><span class="btn sm">Edit</span></div>
+            <div class="tile" style="display:flex;align-items:center;gap:12px"><span class="dot s-ok"></span><div style="flex:1"><b style="font-size:12.5px">Sonarr</b><div class="mono" style="font-size:10px;color:#8a857a">http://localhost:8989</div></div><span class="mono" style="font-size:10.5px;color:#3f8a50">Connected · 31ms</span><span class="btn sm gho">Test</span><span class="btn sm">Edit</span></div>
+            <div class="tile" style="display:flex;align-items:center;gap:12px;border-color:#e6b98f;background:#fbf6ee"><span class="dot s-warn"></span><div style="flex:1"><b style="font-size:12.5px">Radarr</b><div class="mono" style="font-size:10px;color:#8a857a">http://localhost:7878</div></div><span class="mono" style="font-size:10.5px;color:#b5732a">Degraded · 480ms</span><span class="btn sm gho">Test</span><span class="btn sm">Edit</span></div>
+            <div class="tile" style="display:flex;align-items:center;gap:12px;border-color:#e6a79b;background:#fbefec"><span class="dot s-fail"></span><div style="flex:1"><b style="font-size:12.5px">Seedbox / SFTP</b><div class="mono" style="font-size:10px;color:#8a857a">sftp://seedbox.host:22</div></div><span class="mono" style="font-size:10.5px;color:#b5432f">Offline · ECONNREFUSED</span><span class="btn sm gho">Test</span><span class="btn sm pri">Fix</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5.5b form -->
+      <div class="frame" id="s55b" style="width:560px">
+        <div class="cap"><span class="capid">5.5b</span><span class="captitle">Connection form — SFTP</span><span class="capstate">secret set · port validation</span></div>
+        <div style="padding:16px">
+          <div class="mono" style="font-size:10.5px;color:#8a857a;margin-bottom:12px">Connections / Edit — Seedbox / SFTP</div>
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:10px">
+            <div><span class="flab">Host</span><div class="input mono" style="font-size:10.5px"><span style="color:#2c2a26">seedbox.host</span></div></div>
+            <div><span class="flab">Port</span><div class="input err mono"><span style="color:#2c2a26">70000</span></div><div class="errmsg">Range 1–65535</div></div>
+          </div>
+          <div style="margin-bottom:10px"><span class="flab">Username</span><div class="input mono" style="font-size:10.5px"><span style="color:#2c2a26">operator</span></div></div>
+          <div style="margin-bottom:10px"><span class="flab">Password / key</span><div class="input" style="border-style:solid"><span class="mono" style="color:#8a857a">•••••••• set</span><span class="btn sm gho">Replace</span></div><div style="font-size:10px;color:#8a857a;margin-top:4px">🔒 Write-only — stored encrypted, never shown after save</div></div>
+          <div style="margin-bottom:14px"><span class="flab">Remote base path</span><div class="input mono" style="font-size:10px"><span style="color:#2c2a26">/mnt/seedbox/complete</span></div></div>
+          <div class="eyebrow" style="margin-bottom:8px">Test connection · states</div>
+          <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px">
+            <span class="btn sm gho">⚡ Test connection</span>
+            <span class="pill" style="border-color:#c6c1b6"><span class="dot s-idle"></span>◴ Testing…</span>
+            <span class="pill" style="border-color:#a8d3b0;background:#eef6ef;color:#3f8a50"><span class="dot s-ok"></span>Passed · handshake ok · 38ms</span>
+            <span class="pill" style="border-color:#e6a79b;background:#fbefec;color:#b5432f"><span class="dot s-fail"></span>Failed · auth denied (403)</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;border-top:1px solid #e4e0d6;padding-top:12px"><span class="btn pri">Save</span><span class="btn gho">Cancel</span><span class="note" style="margin-left:auto;color:#8a857a">Test must pass before save</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ 5.6 FIRST-RUN WIZARD ============ -->
+  <div class="row" id="setup">
+    <div class="rowhead"><span class="rowtag">5.6</span><span class="rowtitle">First-run setup wizard</span><span class="rownote">Fresh install = empty · reuses the same connection/job forms · steps revisitable</span></div>
+    <div class="frames">
+
+      <!-- step strip + step 1 -->
+      <div class="frame" id="s56a" style="width:600px">
+        <div class="cap"><span class="capid">5.6a</span><span class="captitle">Setup — step 1</span><span class="capstate">connect qBittorrent · test inline</span></div>
+        <div style="padding:18px">
+          <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:18px">
+            <div class="step cur"><span class="stepn">1</span>qBittorrent</div><div class="seg"></div>
+            <div class="step"><span class="stepn">2</span>Sonarr / Radarr</div><div class="seg"></div>
+            <div class="step"><span class="stepn">3</span>SFTP</div><div class="seg"></div>
+            <div class="step"><span class="stepn">4</span>First job</div>
+          </div>
+          <div style="text-align:center;margin-bottom:16px"><div style="font-size:17px;font-weight:700">Connect qBittorrent</div><div style="font-size:12px;color:#8a857a">Your seedbox torrent client. Nothing flows until this is reachable.</div></div>
+          <div style="max-width:400px;margin:0 auto">
+            <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:10px">
+              <div><span class="flab">Host / URL</span><div class="input mono" style="font-size:10.5px"><span style="color:#2c2a26">seedbox.host</span></div></div>
+              <div><span class="flab">Port</span><div class="input mono"><span style="color:#2c2a26">8080</span></div></div>
+            </div>
+            <div style="margin-bottom:10px"><span class="flab">Username</span><div class="input mono" style="font-size:10.5px"><span style="color:#2c2a26">admin</span></div></div>
+            <div style="margin-bottom:12px"><span class="flab">Password</span><div class="input"><span class="mono" style="color:#a09b8f">enter password</span></div></div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px"><span class="btn gho sm">⚡ Test connection</span><span class="pill" style="border-color:#a8d3b0;background:#eef6ef;color:#3f8a50"><span class="dot s-ok"></span>Passed · 24ms</span></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;border-top:1px solid #e4e0d6;padding-top:14px"><span class="btn gho">Skip for now</span><span class="btn pri">Next · Sonarr / Radarr →</span></div>
+        </div>
+      </div>
+
+      <!-- step 4 create job -->
+      <div class="frame" id="s56b" style="width:560px">
+        <div class="cap"><span class="capid">5.6b</span><span class="captitle">Setup — step 4</span><span class="capstate">create first job (reuses job form)</span></div>
+        <div style="padding:18px">
+          <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:18px">
+            <div class="step done"><span class="stepn">✓</span></div><div class="seg" style="background:#4d9a5c"></div>
+            <div class="step done"><span class="stepn">✓</span></div><div class="seg" style="background:#4d9a5c"></div>
+            <div class="step done"><span class="stepn">✓</span></div><div class="seg" style="background:#4d9a5c"></div>
+            <div class="step cur"><span class="stepn">4</span>First job</div>
+          </div>
+          <div style="text-align:center;margin-bottom:16px"><div style="font-size:17px;font-weight:700">Create your first job</div><div style="font-size:12px;color:#8a857a">One category → one pipeline lane. You can clone &amp; tune it later.</div></div>
+          <div style="max-width:400px;margin:0 auto">
+            <div style="margin-bottom:10px"><span class="flab">Job name</span><div class="input"><span style="color:#2c2a26">tv-shows</span></div></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+              <div><span class="flab">Watched category</span><div class="input"><span style="color:#2c2a26">tv-sonarr</span><span>▾</span></div></div>
+              <div><span class="flab">Polling interval</span><div class="input"><span style="color:#2c2a26">60s</span></div></div>
+            </div>
+            <div style="margin-bottom:14px"><span class="flab">Destination path</span><div class="input mono" style="font-size:10px"><span style="color:#2c2a26">/mnt/media/tv</span></div></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;border-top:1px solid #e4e0d6;padding-top:14px"><span class="btn gho">← Back</span><span class="btn pri">Create job &amp; finish</span></div>
+        </div>
+      </div>
+
+      <!-- done -->
+      <div class="frame" id="s56c" style="width:400px">
+        <div class="cap"><span class="capid">5.6c</span><span class="captitle">Setup — done</span><span class="capstate">lands on Dashboard</span></div>
+        <div style="padding:26px 20px;text-align:center">
+          <div style="width:52px;height:52px;border-radius:50%;background:#eef6ef;border:2px solid #4d9a5c;display:flex;align-items:center;justify-content:center;font-size:24px;color:#3f8a50;margin:0 auto 14px">✓</div>
+          <div style="font-size:19px;font-weight:700;margin-bottom:6px">You're all set</div>
+          <div style="font-size:12.5px;color:#8a857a;margin-bottom:18px">Harrbor is watching your first job. Releases will start flowing on the next poll.</div>
+          <div style="text-align:left;display:flex;flex-direction:column;gap:8px;margin-bottom:20px">
+            <div class="chip" style="justify-content:flex-start"><span class="dot s-ok"></span>4 connections tested &amp; healthy</div>
+            <div class="chip" style="justify-content:flex-start"><span class="dot s-ok"></span>1 job created · tv-shows</div>
+            <div class="chip" style="justify-content:flex-start;color:#8a857a"><span class="dot s-idle"></span>Next poll in 60s</div>
+          </div>
+          <span class="btn pri" style="width:100%;justify-content:center">Go to dashboard →</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ 5.7 HISTORY ============ -->
+  <div class="row" id="history" style="margin-bottom:20px">
+    <div class="rowhead"><span class="rowtag">5.7</span><span class="rowtitle">History</span><span class="rownote">Completed · archived · permanently failed · rows link to detail</span></div>
+    <div class="frames">
+      <div class="frame" id="s57a" style="width:820px">
+        <div class="cap"><span class="capid">5.7a</span><span class="captitle">History</span><span class="capstate">searchable / filterable</span></div>
+        <div style="padding:16px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px"><div style="font-size:16px;font-weight:700;margin-right:auto">History</div><span class="input" style="width:150px">🔍 search…</span><span class="chip">Job ▾</span><span class="chip">Outcome ▾</span><span class="chip">Last 7 days ▾</span></div>
+          <div class="tgrid" style="grid-template-columns:2.2fr 1fr 1.1fr 1.3fr 0.9fr 0.5fr;border:1px solid #e4e0d6;border-radius:8px;overflow:hidden">
+            <div class="th">Title</div><div class="th">Job</div><div class="th">Outcome</div><div class="th">Completed</div><div class="th">Duration</div><div class="th"></div>
+            <div class="td"><b>Civil War</b></div><div class="td mono" style="color:#8a857a">movies</div><div class="td"><span class="dot s-ok"></span>Imported</div><div class="td mono" style="color:#8a857a">12:41</div><div class="td mono" style="color:#8a857a">18m</div><div class="td" style="color:#b5732a">→</div>
+            <div class="td"><b>Dark Matter S01E08</b></div><div class="td mono" style="color:#8a857a">tv-shows</div><div class="td"><span class="dot s-idle" style="background:#8a6bc9"></span>Archived</div><div class="td mono" style="color:#8a857a">12:33</div><div class="td mono" style="color:#8a857a">22m</div><div class="td" style="color:#b5732a">→</div>
+            <div class="td"><b>Kingdom of the Planet…</b></div><div class="td mono" style="color:#8a857a">movies</div><div class="td"><span class="dot s-fail"></span>Failed</div><div class="td mono" style="color:#8a857a">11:58</div><div class="td mono" style="color:#8a857a">—</div><div class="td" style="color:#b5732a">→</div>
+            <div class="td"><b>Shogun S01E08</b></div><div class="td mono" style="color:#8a857a">tv-shows</div><div class="td"><span class="dot s-ok"></span>Imported</div><div class="td mono" style="color:#8a857a">11:40</div><div class="td mono" style="color:#8a857a">15m</div><div class="td" style="color:#b5732a">→</div>
+            <div class="td"><b>Ripley S01E02</b></div><div class="td mono" style="color:#8a857a">tv-shows</div><div class="td"><span class="dot s-ok"></span>Imported</div><div class="td mono" style="color:#8a857a">10:12</div><div class="td mono" style="color:#8a857a">19m</div><div class="td" style="color:#b5732a">→</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

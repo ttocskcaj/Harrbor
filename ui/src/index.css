@@ -1,111 +1,98 @@
-:root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+/* ============================================================
+   Harrbor UI — global style entry.
+   Load order matters:
+     1. Tailwind (theme/base/utilities layers)
+     2. Self-hosted IBM Plex fonts
+     3. Design-system tokens (vendored from the harrbor-design skill)
+     4. Tailwind color bridge + base rules
+   The token files set `:root { --font-sans / --radius-lg / ... }` UNLAYERED,
+   which outranks Tailwind's own layered theme defaults of the same name — so
+   `font-sans`, `font-mono`, `rounded-lg`, etc. resolve to Harrbor values with
+   no extra bridging. Only colors need bridging (different variable names).
+   ============================================================ */
+@import "tailwindcss";
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+/* Self-hosted IBM Plex (offline-friendly; replaces the DS Google-Fonts CDN). */
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-sans/700.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
 
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
+/* Harrbor design-system tokens (vendored — keep in sync with the skill). */
+@import "./styles/tokens/colors.css";
+@import "./styles/tokens/typography.css";
+@import "./styles/tokens/spacing.css";
+@import "./styles/tokens/effects.css";
+
+/* ------------------------------------------------------------------
+   Tailwind color bridge — expose the semantic design tokens as Tailwind
+   utilities. `@theme inline` emits utilities that reference the token vars
+   directly (e.g. `bg-surface-card` -> background: var(--surface-card)), so
+   the token indirection is preserved rather than frozen to a hex value.
+   Only semantic aliases + phase hues are mapped, not the raw slate ramp.
+   ------------------------------------------------------------------ */
+@theme inline {
+  /* Surfaces & backgrounds -> bg-bg-app, bg-bg-page, bg-surface-card, ... */
+  --color-bg-app: var(--bg-app);
+  --color-bg-page: var(--bg-page);
+  --color-surface-panel: var(--surface-panel);
+  --color-surface-card: var(--surface-card);
+  --color-surface-inset: var(--surface-inset);
+  --color-surface-hover: var(--surface-hover);
+
+  /* Borders -> border-border-subtle, border-border-strong, border-border-focus */
+  --color-border-subtle: var(--border-subtle);
+  --color-border-strong: var(--border-strong);
+  --color-border-focus: var(--border-focus);
+
+  /* Text -> text-heading, text-body, text-muted, text-faint, text-invert */
+  --color-heading: var(--text-heading);
+  --color-body: var(--text-body);
+  --color-muted: var(--text-muted);
+  --color-faint: var(--text-faint);
+  --color-invert: var(--text-invert);
+
+  /* Accent (harbor light) -> text-accent, bg-accent, border-accent */
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-text: var(--accent-text);
+
+  /* Status vocabulary -> bg/text/border -status-ok | -warn | -error | -active | -idle */
+  --color-status-idle: var(--status-idle);
+  --color-status-active: var(--status-active);
+  --color-status-ok: var(--status-ok);
+  --color-status-warn: var(--status-warn);
+  --color-status-error: var(--status-error);
+
+  /* Pipeline phase hues -> *-phase-discover ... *-phase-archival */
+  --color-phase-discover: var(--phase-discover);
+  --color-phase-download: var(--phase-download);
+  --color-phase-transfer: var(--phase-transfer);
+  --color-phase-import: var(--phase-import);
+  --color-phase-cleanup: var(--phase-cleanup);
+  --color-phase-archival: var(--phase-archival);
+}
+
+/* ------------------------------------------------------------------
+   Base — the dark control-tower ground. Tailwind's preflight already
+   resets box-sizing/margins; here we set the page fill, body type, and
+   the slim slate scrollbars used throughout the app.
+   ------------------------------------------------------------------ */
+body {
+  background: var(--bg-page);
+  color: var(--text-body);
+  font: var(--type-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb {
+  background: var(--slate-700);
+  border-radius: var(--radius-pill);
+  border: 2px solid var(--bg-page);
 }
-
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-}
-
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
-}
-
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
-  }
-}
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
-}
-p {
-  margin: 0;
-}
-
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
-}
-
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
-}
+::-webkit-scrollbar-track { background: transparent; }

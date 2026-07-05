@@ -1,0 +1,11 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Harrbor">
+  <rect x="1" y="1" width="62" height="62" rx="15" fill="#0f1725" stroke="#212e43" stroke-width="1.5"></rect>
+  
+  <g stroke="#f5b23f" stroke-width="3.2" stroke-linecap="round" fill="none">
+    <path d="M22 20 A16 16 0 0 1 22 44" opacity="0.32"></path>
+    <path d="M28 24 A11 11 0 0 1 28 40" opacity="0.58"></path>
+    <path d="M34 28 A6 6 0 0 1 34 36" opacity="0.9"></path>
+  </g>
+  
+  <circle cx="42" cy="32" r="4.2" fill="#ffce74"></circle>
+</svg>

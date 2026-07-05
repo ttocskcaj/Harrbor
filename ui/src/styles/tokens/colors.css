@@ -1,0 +1,108 @@
+/* ============================================================
+   HARRBOR · COLOR SYSTEM
+   Calm dark control-tower. Deep slate/navy base, a single warm amber
+   "harbor light" accent, with teal reserved for the in-progress status.
+   Dark mode is the ground truth; there is no light theme.
+   Vendored from .claude/skills/harrbor-design/tokens/colors.css — keep in sync.
+   ============================================================ */
+:root {
+  /* --- Base ramp: navy-slate, coolest at the bottom ---------- */
+  --slate-1000: #070b12;  /* app backdrop, deepest well        */
+  --slate-950:  #0b111b;  /* page background                    */
+  --slate-900:  #0f1725;  /* raised surface / panels            */
+  --slate-850:  #131d2e;  /* cards                              */
+  --slate-800:  #1a2537;  /* card hover, inset wells            */
+  --slate-750:  #212e43;  /* borders (strong)                   */
+  --slate-700:  #2a3950;  /* dividers, subtle borders           */
+  --slate-600:  #3a4c68;  /* disabled fills                     */
+  --slate-500:  #56698a;  /* muted icon                         */
+  --slate-400:  #7688a8;  /* tertiary text                      */
+  --slate-300:  #9aabc6;  /* secondary text                     */
+  --slate-200:  #c2cee0;  /* body text                          */
+  --slate-100:  #e4eaf3;  /* headings                           */
+  --slate-050:  #f4f7fb;  /* max-contrast text                  */
+
+  /* --- Teal: reserved for the in-progress / transferring status ---- */
+  --teal-600:   #0d7d76;  /* pressed                            */
+  --teal-500:   #14a89c;  /* accent base                        */
+  --teal-400:   #22c6b6;  /* accent hover / bright              */
+  --teal-300:   #5fe0d1;  /* accent text on dark                */
+  --teal-glow:  rgba(34, 198, 182, 0.14);
+
+  /* --- Amber: the harbor-light accent + retrying/warning status --- */
+  --amber-600:  #b57611;
+  --amber-500:  #e0951c;
+  --amber-400:  #f5b23f;
+  --amber-300:  #ffce74;
+  --amber-glow: rgba(245, 178, 63, 0.14);
+
+  /* --- Extended semantics ----------------------------------- */
+  --green-500:  #34b877;  /* healthy / done / connected         */
+  --green-300:  #74e0a8;
+  --green-glow: rgba(52, 184, 119, 0.14);
+  --red-500:    #e05656;  /* failed / offline / error           */
+  --red-300:    #ff8f8f;
+  --red-glow:   rgba(224, 86, 86, 0.14);
+  --blue-500:   #4d8ef0;  /* informational (rare)               */
+  --blue-300:   #8fbaff;
+
+  /* ============================================================
+     SEMANTIC ALIASES — reach for these in product code
+     ============================================================ */
+  --bg-app:        var(--slate-1000);
+  --bg-page:       var(--slate-950);
+  --surface-panel: var(--slate-900);
+  --surface-card:  var(--slate-850);
+  --surface-inset: var(--slate-800);
+  --surface-hover: var(--slate-800);
+
+  --border-subtle: var(--slate-700);
+  --border-strong: var(--slate-750);
+  --border-focus:  var(--amber-500);
+
+  --text-heading:  var(--slate-100);
+  --text-body:     var(--slate-200);
+  --text-muted:    var(--slate-400);
+  --text-faint:    var(--slate-500);
+  --text-invert:   var(--slate-1000);
+
+  /* Accent = the amber "harbor light": the single warm point in a cool,
+     dark room. Draws the eye — primary actions, active/selected UI,
+     focus, links, highlights. (Also the hue of the WARN status.) */
+  --accent:        var(--amber-500);
+  --accent-hover:  var(--amber-400);
+  --accent-press:  var(--amber-600);
+  --accent-text:   var(--amber-300);
+  --accent-glow:   var(--amber-glow);
+
+  /* ------------------------------------------------------------
+     SEMANTIC STATUS VOCABULARY — colorblind-safe, ALWAYS paired
+     with an icon and/or label (never color alone). Shared across
+     pipeline state, connection health, and form validation.
+       idle/waiting · in-progress/transferring · success/imported
+       · retrying/degraded/warning · failed/stuck
+     ------------------------------------------------------------ */
+  --status-idle:    var(--slate-500);   /* waiting, not started    */
+  --status-active:  var(--teal-400);     /* in-progress / transferring (cool = in motion) */
+  --status-ok:      var(--green-500);    /* success / imported / connected */
+  --status-warn:    var(--amber-500);    /* retrying / degraded / warning */
+  --status-error:   var(--red-500);      /* failed / stuck / offline */
+  --status-active-glow: var(--teal-glow);
+
+  /* Health aliases (Dashboard + Connections use the same vocabulary) */
+  --health-up:       var(--status-ok);
+  --health-degraded: var(--status-warn);
+  --health-down:     var(--status-error);
+
+  /* ------------------------------------------------------------
+     PIPELINE PHASE ACCENTS — a cool→warm walk left to right so a
+     release's position reads by hue as well as column.
+     Discover · Download · Transfer · Import · Cleanup · Archival
+     ------------------------------------------------------------ */
+  --phase-discover: #6b8fd6;  /* slate-blue — scouting           */
+  --phase-download: #38b2c4;  /* cyan — pulling                  */
+  --phase-transfer: #2fb0a6;  /* teal — in flight                */
+  --phase-import:   #5bbf7a;  /* green — landing                 */
+  --phase-cleanup:  #c99a3a;  /* muted gold — sweeping           */
+  --phase-archival: #8a7bd8;  /* muted violet — at rest          */
+}

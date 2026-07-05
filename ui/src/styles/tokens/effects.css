@@ -1,0 +1,74 @@
+/* ============================================================
+   HARRBOR · EFFECTS — shadows, glows, borders, motion
+   Shadows are deep and diffuse (things float over a dark well).
+   "Glows" are the accent language for live/attention states.
+   Vendored from .claude/skills/harrbor-design/tokens/effects.css — keep in sync.
+   ============================================================ */
+:root {
+  /* Elevation — soft, low-chroma, never harsh */
+  --shadow-sm:  0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md:  0 4px 14px rgba(0, 0, 0, 0.45);
+  --shadow-lg:  0 12px 32px rgba(0, 0, 0, 0.5);
+  --shadow-pop: 0 18px 48px rgba(0, 0, 0, 0.6);
+
+  /* Inset well — for inputs and recessed tracks */
+  --inset-well: inset 0 1px 2px rgba(0, 0, 0, 0.45);
+
+  /* Focus ring — amber accent, always visible on dark */
+  --ring-focus: 0 0 0 2px var(--slate-950), 0 0 0 4px var(--amber-500);
+
+  /* Signal glows — status halos on dots, live chips */
+  --glow-active: 0 0 0 3px var(--accent-glow);
+  --glow-warn:   0 0 0 3px var(--amber-glow);
+  --glow-ok:     0 0 0 3px var(--green-glow);
+  --glow-error:  0 0 0 3px var(--red-glow);
+
+  /* Hairline top-light on raised surfaces (subtle bevel) */
+  --edge-light: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+
+  /* Motion — quick, mechanical, no bounce */
+  --ease-out:   cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-inout: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast:   120ms;
+  --dur-med:    200ms;
+  --dur-slow:   320ms;
+
+  /* Live-pulse for active pipeline items */
+  --pulse: pulse-glow 2.2s var(--ease-inout) infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+
+@keyframes flow-dash {
+  to { background-position: 24px 0; }
+}
+
+/* ------------------------------------------------------------
+   HARBOR-LIGHT — the amber accent behaving like a beacon.
+   ------------------------------------------------------------ */
+
+/* Beacon breath: slow amber halo swell behind the brand mark. */
+@keyframes beacon-breath {
+  0%, 100% { opacity: 0.35; transform: scale(0.92); }
+  50%      { opacity: 0.9;  transform: scale(1.08); }
+}
+
+/* Active bloom: the single warm light marking "what's happening now". */
+@keyframes bloom-drift {
+  0%, 100% { opacity: 0.7; }
+  50%      { opacity: 1; }
+}
+
+:root {
+  /* Ambient amber radial for the app well's warm floor (~5%). */
+  --harbor-floor: radial-gradient(120% 90% at 50% 118%, rgba(245, 178, 63, 0.06), transparent 60%);
+  /* Focal bloom — light spilling from behind the live element. */
+  --harbor-bloom: radial-gradient(60% 120% at 50% 50%, rgba(245, 178, 63, 0.16), transparent 72%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --pulse: none; }
+}

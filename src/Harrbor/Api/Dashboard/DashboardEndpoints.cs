@@ -18,7 +18,12 @@ public static class DashboardEndpoints
 
     public static IEndpointRouteBuilder MapDashboardEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/dashboard", GetDashboardAsync);
+        // .Produces<T>() gives the generated OpenAPI doc a typed 200 response body,
+        // so the React client codegens fully-typed data (handlers return IResult,
+        // which otherwise erases the response type). See the other endpoint groups
+        // for the same treatment as they gain UI consumers.
+        app.MapGet("/api/dashboard", GetDashboardAsync)
+            .Produces<DashboardResponse>();
         return app;
     }
 

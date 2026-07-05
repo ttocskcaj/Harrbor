@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/harrbor-design-system-2a1653f1-32de-44a5-b980-1f4cb20c1769/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/harrbor-design-system-2a1653f1-32de-44a5-b980-1f4cb20c1769/tokens/colors.css">
+<link rel="stylesheet" href="_ds/harrbor-design-system-2a1653f1-32de-44a5-b980-1f4cb20c1769/tokens/typography.css">
+<link rel="stylesheet" href="_ds/harrbor-design-system-2a1653f1-32de-44a5-b980-1f4cb20c1769/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/harrbor-design-system-2a1653f1-32de-44a5-b980-1f4cb20c1769/tokens/effects.css">
+<link rel="stylesheet" href="_ds/harrbor-design-system-2a1653f1-32de-44a5-b980-1f4cb20c1769/styles.css">
+<script src="_ds/harrbor-design-system-2a1653f1-32de-44a5-b980-1f4cb20c1769/_ds_bundle.js"></script>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg-page);color:var(--text-body);font:var(--type-body)}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--slate-700);border-radius:6px;border:2px solid var(--bg-page)}
+  ::-webkit-scrollbar-track{background:transparent}
+  .op-navbtn:hover{background:var(--surface-hover) !important}
+</style>
+</helmet>
+
+<div style="display:flex;height:100vh;overflow:hidden;background:var(--bg-page);color:var(--text-body);font:var(--type-body)">
+
+  <!-- ===================== SIDEBAR ===================== -->
+  <aside style="width:var(--sidebar-w);flex-shrink:0;background:var(--bg-app);border-right:1px solid var(--border-subtle);display:flex;flex-direction:column;padding:0 0 12px">
+    <div style="display:flex;align-items:center;gap:10px;height:var(--topbar-h);padding:0 16px;border-bottom:1px solid var(--border-subtle)">
+      <span style="position:relative;display:grid;place-items:center;width:28px;height:28px">
+        <span aria-hidden="true" style="position:absolute;width:34px;height:34px;border-radius:50%;background:var(--harbor-bloom);animation:beacon-breath 3.6s var(--ease-inout) infinite"></span>
+        <img src="assets/harrbor-mark.svg" width="28" height="28" alt="" style="position:relative">
+      </span>
+      <span style="font:var(--fw-semibold) var(--text-lg) var(--font-sans);color:var(--text-heading);letter-spacing:var(--tracking-tight)">Harrbor</span>
+    </div>
+    <nav style="padding:12px 10px;display:flex;flex-direction:column;gap:2px">
+      <div class="op-navbtn" style="display:flex;align-items:center;gap:11px;padding:0 12px;height:34px;border-radius:var(--radius-sm);background:var(--accent-glow);color:var(--accent-text);font:var(--fw-semibold) var(--text-base) var(--font-sans);box-shadow:inset 2px 0 0 var(--accent);cursor:pointer"><span style="width:16px;text-align:center;font-size:14px">◵</span>Operate</div>
+      <div class="op-navbtn" style="display:flex;align-items:center;gap:11px;padding:0 12px;height:34px;border-radius:var(--radius-sm);color:var(--text-muted);font:var(--fw-medium) var(--text-base) var(--font-sans);cursor:pointer"><span style="width:16px;text-align:center;font-size:14px">≡</span>Jobs</div>
+      <div class="op-navbtn" style="display:flex;align-items:center;gap:11px;padding:0 12px;height:34px;border-radius:var(--radius-sm);color:var(--text-muted);font:var(--fw-medium) var(--text-base) var(--font-sans);cursor:pointer"><span style="width:16px;text-align:center;font-size:14px">⚙</span>Connections</div>
+      <div class="op-navbtn" style="display:flex;align-items:center;gap:11px;padding:0 12px;height:34px;border-radius:var(--radius-sm);color:var(--text-muted);font:var(--fw-medium) var(--text-base) var(--font-sans);cursor:pointer"><span style="width:16px;text-align:center;font-size:14px">◴</span>History</div>
+      <div class="op-navbtn" style="display:flex;align-items:center;gap:11px;padding:0 12px;height:34px;border-radius:var(--radius-sm);color:var(--text-muted);font:var(--fw-medium) var(--text-base) var(--font-sans);cursor:pointer"><span style="width:16px;text-align:center;font-size:14px">▤</span>Logs</div>
+    </nav>
+    <div style="margin-top:auto;padding:12px 16px;border-top:1px solid var(--border-subtle)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+        <x-import component-from-global-scope="HarrborDesignSystem_2a1653.StatusDot" status="ok" pulse="{{ true }}" size="{{ 8 }}" hint-size="8px,8px"></x-import>
+        <span style="font:var(--text-xs) var(--font-sans);color:var(--text-muted)">Harbormaster online</span>
+      </div>
+      <div style="font:var(--text-2xs) var(--font-mono);color:var(--text-faint);line-height:1.6;font-variant-numeric:tabular-nums">
+        <div><span style="color:var(--status-active)">↑</span> {{ rate }} MB/s · 10 in flight</div>
+        <div>sync {{ sync }}s ago · up 6d 04h · v0.9.4</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ===================== MAIN ===================== -->
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+    <!-- topbar -->
+    <header style="height:var(--topbar-h);flex-shrink:0;display:flex;align-items:center;gap:14px;padding:0 22px;border-bottom:1px solid var(--border-subtle);background:var(--bg-page)">
+      <div>
+        <div style="font:var(--fw-semibold) var(--text-lg) var(--font-sans);color:var(--text-heading)">Operate</div>
+        <div style="font:var(--text-2xs) var(--font-mono);color:var(--text-faint);margin-top:1px">28 active · 3 need attention</div>
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+        <div style="display:flex;gap:2px;padding:3px;border:1px solid var(--border-subtle);border-radius:var(--radius-md);background:var(--surface-inset)">
+          <button onClick="{{ showRail }}" style="{{ railBtnStyle }}">Rail</button>
+          <button onClick="{{ showList }}" style="{{ listBtnStyle }}">List</button>
+        </div>
+        <x-import component-from-global-scope="HarrborDesignSystem_2a1653.Button" size="sm" variant="secondary" iconLeft="↻" hint-size="auto,26px">Recheck</x-import>
+        <x-import component-from-global-scope="HarrborDesignSystem_2a1653.Badge" tone="active" dot="{{ true }}" hint-size="auto,20px">auto 3s</x-import>
+      </div>
+    </header>
+
+    <!-- content -->
+    <main style="flex:1;min-height:0;overflow:auto;padding:22px;background-image:var(--harbor-floor);background-attachment:local">
+      <div style="max-width:1180px;display:flex;flex-direction:column;gap:16px">
+
+        <!-- persistent connection strip — non-phase-scoped health, always on top -->
+        <div style="display:flex;align-items:stretch;background:var(--surface-panel);border:1px solid var(--border-subtle);border-radius:var(--radius-md);overflow:hidden;box-shadow:var(--edge-light)">
+          <div style="flex:1;display:flex;align-items:center;gap:9px;padding:10px 16px">
+            <x-import component-from-global-scope="HarrborDesignSystem_2a1653.StatusDot" status="ok" size="{{ 9 }}" hint-size="9px,9px"></x-import>
+            <span style="font:var(--fw-medium) var(--text-base) var(--font-sans);color:var(--text-heading)">qBittorrent</span>
+            <span style="margin-left:auto;font:var(--text-sm) var(--font-mono);color:var(--text-muted)">24ms</span>
+          </div>
+          <div style="width:1px;background:var(--border-subtle)"></div>
+          <div style="flex:1;display:flex;align-items:center;gap:9px;padding:10px 16px">
+            <x-import component-from-global-scope="HarrborDesignSystem_2a1653.StatusDot" status="ok" size="{{ 9 }}" hint-size="9px,9px"></x-import>
+            <span style="font:var(--fw-medium) var(--text-base) var(--font-sans);color:var(--text-heading)">Sonarr</span>
+            <span style="margin-left:auto;font:var(--text-sm) var(--font-mono);color:var(--text-muted)">31ms</span>
+          </div>
+          <div style="width:1px;background:var(--border-subtle)"></div>
+          <div style="flex:1;display:flex;align-items:center;gap:9px;padding:10px 16px">
+            <x-import component-from-global-scope="HarrborDesignSystem_2a1653.StatusDot" status="warn" size="{{ 9 }}" hint-size="9px,9px"></x-import>
+            <span style="font:var(--fw-medium) var(--text-base) var(--font-sans);color:var(--text-heading)">Radarr</span>
+            <span style="margin-left:auto;font:var(--text-sm) var(--font-mono);color:var(--amber-300)">degraded · 480ms</span>
+          </div>
+          <div style="width:1px;background:var(--border-subtle)"></div>
+          <div style="flex:1;display:flex;align-items:center;gap:9px;padding:10px 16px;background:color-mix(in srgb, var(--red-500) 6%, transparent)">
+            <x-import component-from-global-scope="HarrborDesignSystem_2a1653.StatusDot" status="error" size="{{ 9 }}" hint-size="9px,9px"></x-import>
+            <span style="font:var(--fw-medium) var(--text-base) var(--font-sans);color:var(--text-heading)">Seedbox / SFTP</span>
+            <span style="margin-left:auto;font:var(--text-sm) var(--font-mono);color:var(--red-300)">ECONNREFUSED</span>
+          </div>
+        </div>
+
+        <!-- ============ RAIL MODE ============ -->
+        <sc-if value="{{ isRail }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:16px">
+
+          <!-- flow-rail spine + phase drill = ONE continuous surface -->
+          <div style="background:var(--surface-card);border:1px solid {{ panelBorder }};border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-md),var(--edge-light);transition:border-color var(--dur-med) var(--ease-out)">
+            <div style="padding:15px 18px 2px">
+              <div style="font:var(--type-eyebrow);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--accent-text)">Pipeline</div>
+              <div style="font:var(--type-card);color:var(--text-heading);margin-top:6px">Current releases</div>
+              <div style="font:var(--text-sm) var(--font-sans);color:var(--text-muted);margin-top:3px">Tap a phase to inspect its manifest</div>
+            </div>
+            <div style="padding:14px 14px 18px">
+              <x-import component-from-global-scope="HarrborDesignSystem_2a1653.FlowRail" phases="{{ railPhases }}" bloom="{{ bloomPhase }}" activePhase="{{ selectedPhase }}" onSelect="{{ selectPhase }}" hint-size="100%,120px"></x-import>
+            </div>
+
+            <!-- drill: same surface, seams straight out of the selected node -->
+            <sc-if value="{{ hasSelection }}" hint-placeholder-val="{{ false }}">
+              <div style="position:relative;background:var(--surface-inset);border-top:2px solid {{ drillHue }}">
+                <!-- phase-hued caret tying the drawer up to the selected node -->
+                <svg width="22" height="10" viewBox="0 0 22 10" style="position:absolute;left:{{ connectorLeft }};top:0;transform:translate(-50%,-100%);overflow:visible;pointer-events:none">
+                  <path d="M0 10 L11 0 L22 10 Z" fill="{{ drillHue }}"></path>
+                </svg>
+
+                <div style="display:flex;align-items:center;gap:10px;padding:13px 16px 11px">
+                  <x-import component-from-global-scope="HarrborDesignSystem_2a1653.PhaseChip" phase="{{ selectedPhase }}" active="{{ true }}" hint-size="auto,22px"></x-import>
+                  <span style="font:var(--fw-semibold) var(--text-md) var(--font-sans);color:var(--text-heading)">{{ selectedCount }} releases</span>
+                  <span style="font:var(--text-sm) var(--font-mono);color:var(--text-faint)">of 28 tracked</span>
+                  <span style="margin-left:auto">
+                    <x-import component-from-global-scope="HarrborDesignSystem_2a1653.IconButton" label="Collapse" onClick="{{ clearPhase }}" hint-size="28px,28px">✕</x-import>
+                  </span>
+                </div>
+                <div style="display:grid;grid-template-columns:2.4fr 1fr 1.4fr 0.8fr 1.2fr;padding:8px 16px;border-top:1px solid var(--border-subtle);font:var(--fw-semibold) var(--text-2xs) var(--font-sans);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-faint)">
+                  <span>Release</span><span>Job</span><span>Progress</span><span>In phase</span><span>Status</span>
+                </div>
+                <sc-for list="{{ drillReleases }}" as="r" hint-placeholder-count="4">
+                  <div style="{{ r.drillRowStyle }}">
+                    <span style="font:var(--fw-medium) var(--text-sm) var(--font-mono);color:var(--text-body);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.name }}</span>
+                    <span style="font:var(--text-sm) var(--font-mono);color:var(--text-muted)">{{ r.job }}</span>
+                    <span style="padding-right:14px">
+                      <sc-if value="{{ r.hasProgress }}" hint-placeholder-val="{{ true }}">
+                        <x-import component-from-global-scope="HarrborDesignSystem_2a1653.ProgressBar" value="{{ r.progress }}" tone="{{ r.progressTone }}" striped="{{ r.active }}" height="{{ 6 }}" hint-size="100%,6px"></x-import>
+                      </sc-if>
+                      <sc-if value="{{ r.noProgress }}" hint-placeholder-val="{{ false }}">
+                        <span style="font:var(--text-sm) var(--font-mono);color:var(--text-faint)">—</span>
+                      </sc-if>
+                    </span>
+                    <span style="font:var(--text-sm) var(--font-mono);color:var(--text-muted)">{{ r.timeInPhase }}</span>
+                    <span style="display:flex;align-items:center;gap:7px;font:var(--text-sm) var(--font-mono);color:{{ r.statusColor }}">
+                      <x-import component-from-global-scope="HarrborDesignSystem_2a1653.StatusDot" status="{{ r.statusDot }}" size="{{ 7 }}" hint-size="7px,7px"></x-import>
+                      {{ r.statusLabel }}
+                    </span>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+
+          <!-- attention-first, full width -->
+          <x-import component-from-global-scope="HarrborDesignSystem_2a1653.Card" eyebrow="Needs attention" title="Failures &amp; stalls" subtitle="Newest first" hint-size="100%,240px">
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <sc-for list="{{ attention }}" as="a" hint-placeholder-count="3">
+                <x-import component-from-global-scope="HarrborDesignSystem_2a1653.AttentionItem" severity="{{ a.severity }}" message="{{ a.message }}" releaseId="{{ a.releaseId }}" phase="{{ a.phase }}" time="{{ a.time }}" action="{{ a.action }}" onAction="{{ a.onAction }}" hint-size="100%,64px"></x-import>
+              </sc-for>
+            </div>
+          </x-import>
+
+          <!-- jobs collapsed strip -->
+          <div style="display:flex;align-items:center;gap:11px;padding:12px 16px;background:var(--surface-panel);border:1px solid var(--border-subtle);border-radius:var(--radius-md);cursor:pointer;box-shadow:var(--edge-light)">
+            <span style="color:var(--text-faint);font-size:12px">▸</span>
+            <span style="font:var(--fw-medium) var(--text-base) var(--font-sans);color:var(--text-body)">Jobs</span>
+            <x-import component-from-global-scope="HarrborDesignSystem_2a1653.Badge" tone="ok" dot="{{ true }}" hint-size="auto,20px">2 healthy</x-import>
+            <span style="font:var(--text-sm) var(--font-mono);color:var(--text-muted)">tv-shows · movies · next poll 42s</span>
+            <span style="margin-left:auto;font:var(--text-xs) var(--font-mono);color:var(--text-faint)">expand</span>
+          </div>
+
+        </div>
+        </sc-if>
+
+        <!-- ============ LIST MODE ============ -->
+        <sc-if value="{{ isList }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="width:200px">
+              <x-import component-from-global-scope="HarrborDesignSystem_2a1653.Select" size="sm" options="{{ jobOptions }}" hint-size="200px,26px"></x-import>
+            </div>
+            <div style="width:170px">
+              <x-import component-from-global-scope="HarrborDesignSystem_2a1653.Select" size="sm" options="{{ phaseOptions }}" hint-size="170px,26px"></x-import>
+            </div>
+            <x-import component-from-global-scope="HarrborDesignSystem_2a1653.Badge" tone="warn" dot="{{ true }}" hint-size="auto,20px">3 stuck</x-import>
+            <x-import component-from-global-scope="HarrborDesignSystem_2a1653.Badge" tone="active" dot="{{ true }}" hint-size="auto,20px">10 in flight</x-import>
+            <span style="margin-left:auto;font:var(--text-xs) var(--font-mono);color:var(--text-faint)">showing 50 of 200</span>
+          </div>
+
+          <div style="background:var(--surface-panel);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-md),var(--edge-light)">
+            <div style="display:grid;grid-template-columns:2.4fr 1fr 1.1fr 0.8fr 1.3fr 1.1fr;padding:10px 16px;border-bottom:1px solid var(--border-subtle);font:var(--fw-semibold) var(--text-2xs) var(--font-sans);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-faint)">
+              <span>Release</span><span>Job</span><span>Phase</span><span>In phase</span><span>Progress</span><span>Status</span>
+            </div>
+            <sc-for list="{{ allReleases }}" as="r" hint-placeholder-count="9">
+              <div style="{{ r.rowStyle }}">
+                <span style="font:var(--fw-medium) var(--text-sm) var(--font-mono);color:var(--text-body);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.name }}</span>
+                <span style="font:var(--text-sm) var(--font-mono);color:var(--text-muted)">{{ r.job }}</span>
+                <span><x-import component-from-global-scope="HarrborDesignSystem_2a1653.PhaseChip" phase="{{ r.phase }}" size="sm" hint-size="auto,20px"></x-import></span>
+                <span style="font:var(--text-sm) var(--font-mono);color:var(--text-muted)">{{ r.timeInPhase }}</span>
+                <span style="padding-right:14px">
+                  <sc-if value="{{ r.hasProgress }}" hint-placeholder-val="{{ true }}">
+                    <x-import component-from-global-scope="HarrborDesignSystem_2a1653.ProgressBar" value="{{ r.progress }}" tone="{{ r.progressTone }}" striped="{{ r.active }}" height="{{ 6 }}" hint-size="100%,6px"></x-import>
+                  </sc-if>
+                  <sc-if value="{{ r.noProgress }}" hint-placeholder-val="{{ false }}">
+                    <span style="font:var(--text-sm) var(--font-mono);color:var(--text-faint)">—</span>
+                  </sc-if>
+                </span>
+                <span style="display:flex;align-items:center;gap:7px;font:var(--text-sm) var(--font-mono);color:{{ r.statusColor }}">
+                  <x-import component-from-global-scope="HarrborDesignSystem_2a1653.StatusDot" status="{{ r.statusDot }}" size="{{ 7 }}" hint-size="7px,7px"></x-import>
+                  {{ r.statusLabel }}
+                </span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        </sc-if>
+
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;}}">
+class Component extends DCLogic {
+  state = { viewMode: 'rail', selectedPhase: null, rate: 41.8, sync: 3 };
+
+  componentDidMount() {
+    this._id = setInterval(() => {
+      this.setState((s) => ({
+        rate: Math.max(0, +(s.rate + (Math.random() - 0.5) * 5).toFixed(1)),
+        sync: s.sync >= 9 ? 0 : s.sync + 3,
+      }));
+    }, 2000);
+  }
+  componentWillUnmount() { clearInterval(this._id); }
+
+  renderVals() {
+    const PHUE = {
+      discover: 'var(--phase-discover)', download: 'var(--phase-download)',
+      transfer: 'var(--phase-transfer)', import: 'var(--phase-import)',
+      cleanup: 'var(--phase-cleanup)', archival: 'var(--phase-archival)',
+    };
+    const LABEL = { discover: 'Discover', download: 'Download', transfer: 'Transfer', import: 'Import', cleanup: 'Cleanup', archival: 'Archival' };
+    const ORDER = ['discover', 'download', 'transfer', 'import', 'cleanup', 'archival'];
+
+    const railPhases = [
+      { phase: 'discover', count: 4 },
+      { phase: 'download', count: 6, active: true },
+      { phase: 'transfer', count: 12, active: true, stuck: true, stuckCount: 2 },
+      { phase: 'import', count: 3, stuck: true, stuckCount: 1 },
+      { phase: 'cleanup', count: 1 },
+      { phase: 'archival', count: 2 },
+    ];
+
+    const releases = [
+      { name: 'The.Bear.S03E06.2160p', job: 'tv-shows', phase: 'transfer', size: '3.0 GB', progress: 34, stuck: true, eta: '—', timeInPhase: '6m', statusDot: 'error', statusLabel: 'Becalmed · 0 B/s' },
+      { name: 'Alien.Romulus.2024.2160p', job: 'movies', phase: 'transfer', size: '8.2 GB', progress: 12, stuck: true, eta: 'retry 2/5', timeInPhase: '3m', statusDot: 'warn', statusLabel: 'Retrying' },
+      { name: 'Fallout.S01E05.1080p', job: 'tv-shows', phase: 'transfer', size: '4.3 GB', progress: 62, active: true, eta: '6m', timeInPhase: '1m', statusDot: 'active', statusLabel: '62% · 4.2 MB/s' },
+      { name: 'Furiosa.2024.2160p', job: 'movies', phase: 'transfer', size: '21 GB', progress: 88, active: true, eta: '2m', timeInPhase: '2m', statusDot: 'active', statusLabel: '88% · 6.1 MB/s' },
+      { name: 'Shogun.S01E09.2160p', job: 'tv-shows', phase: 'download', size: '6.1 GB', progress: 45, active: true, eta: '5m', timeInPhase: '2m', statusDot: 'idle', statusLabel: 'Downloading' },
+      { name: 'Silo.S02E04.1080p', job: 'tv-shows', phase: 'discover', size: '2.8 GB', progress: null, eta: '', timeInPhase: '30s', statusDot: 'idle', statusLabel: 'Queued' },
+      { name: 'Ripley.S01E03.1080p', job: 'tv-shows', phase: 'import', size: '2.2 GB', progress: null, stuck: true, eta: '—', timeInPhase: '4m', statusDot: 'error', statusLabel: 'Import failed' },
+      { name: 'Civil.War.2024.2160p', job: 'movies', phase: 'cleanup', size: '18 GB', progress: null, eta: '', timeInPhase: '8s', statusDot: 'ok', statusLabel: 'Cleaning' },
+      { name: 'Dark.Matter.S01E08.1080p', job: 'tv-shows', phase: 'archival', size: '4.0 GB', progress: null, eta: '', timeInPhase: '5s', statusDot: 'ok', statusLabel: 'Seeding' },
+    ];
+
+    const STATUS_COLOR = { error: 'var(--red-300)', warn: 'var(--amber-300)', active: 'var(--teal-300)', ok: 'var(--green-300)', idle: 'var(--text-muted)' };
+    const TONE = { error: 'error', warn: 'warn', active: 'active', ok: 'ok', idle: 'accent' };
+    const sortStuck = (a, b) => (b.stuck ? 1 : 0) - (a.stuck ? 1 : 0);
+
+    const decorate = (r) => ({
+      ...r,
+      hasProgress: r.progress != null,
+      noProgress: r.progress == null,
+      progressTone: TONE[r.statusDot] || 'accent',
+      statusColor: STATUS_COLOR[r.statusDot] || 'var(--text-muted)',
+      rowStyle: {
+        display: 'grid', gridTemplateColumns: '2.4fr 1fr 1.1fr 0.8fr 1.3fr 1.1fr',
+        alignItems: 'center', padding: '11px 16px', borderTop: '1px solid var(--border-subtle)',
+        background: r.stuck ? 'color-mix(in srgb, var(--red-500) 7%, transparent)' : 'transparent',
+      },
+      drillRowStyle: {
+        display: 'grid', gridTemplateColumns: '2.4fr 1fr 1.4fr 0.8fr 1.2fr',
+        alignItems: 'center', padding: '11px 16px', borderTop: '1px solid var(--border-subtle)',
+        background: r.stuck ? 'color-mix(in srgb, var(--red-500) 7%, transparent)' : 'transparent',
+      },
+    });
+
+    const selected = this.state.selectedPhase;
+    const drillReleases = selected ? releases.filter((r) => r.phase === selected).sort(sortStuck).map(decorate) : [];
+    const allReleases = [...releases].sort(sortStuck).map(decorate);
+
+    const metrics = [
+      { label: 'In pipeline', value: '28', unit: '', delta: '', tone: 'accent', accentBar: true },
+      { label: 'Transferring', value: '10', unit: 'active', delta: '+2', tone: 'accent', accentBar: false },
+      { label: 'Stuck', value: '3', unit: '', delta: '+2', tone: 'warn', accentBar: true },
+      { label: 'Failed · 24h', value: '1', unit: '', delta: '', tone: 'error', accentBar: true },
+    ];
+
+    const connections = [
+      { name: 'qBittorrent', kind: 'torrent', host: '10.0.0.4:8080', status: 'ok', detail: '24ms · v4.6.4' },
+      { name: 'Sonarr', kind: 'tv', host: 'sonarr.local:8989', status: 'ok', detail: '31ms · v4.0.9' },
+      { name: 'Radarr', kind: 'movies', host: 'radarr.local:7878', status: 'warn', detail: 'degraded · 480ms' },
+      { name: 'SFTP', kind: 'transfer', host: 'seed.hetzner.net:22', status: 'error', detail: 'ECONNREFUSED' },
+    ];
+
+    const noop = () => {};
+    const attention = [
+      { severity: 'error', message: 'Transfer becalmed over SFTP (0 B/s for 6m)', releaseId: 'rel_8fa3c19d', phase: 'transfer', time: '6m ago', action: 'Retry', onAction: noop },
+      { severity: 'error', message: 'Import failed — no matching series in Sonarr', releaseId: 'rel_2b71ee40', phase: 'import', time: '4m ago', action: 'Retry', onAction: noop },
+      { severity: 'warn', message: 'Seedbox / SFTP unreachable — blocks all transfers', releaseId: 'conn_sftp', phase: 'transfer', time: '6m ago', action: 'Inspect', onAction: noop },
+    ];
+
+    const seg = (active) => ({
+      padding: '4px 13px', borderRadius: 'var(--radius-xs)', border: 'none', cursor: 'pointer',
+      font: 'var(--fw-semibold) var(--text-xs) var(--font-sans)',
+      background: active ? 'var(--accent-glow)' : 'transparent',
+      color: active ? 'var(--accent-text)' : 'var(--text-muted)',
+      boxShadow: active ? 'inset 0 0 0 1px var(--accent)' : 'none',
+    });
+
+    return {
+      isRail: this.state.viewMode === 'rail',
+      isList: this.state.viewMode === 'list',
+      hasSelection: !!selected,
+      railPhases, bloomPhase: 'transfer',
+      selectedPhase: selected,
+      selectedLabel: selected ? LABEL[selected] : '',
+      selectedCount: drillReleases.length,
+      drillHue: selected ? PHUE[selected] : 'var(--border-subtle)',
+      connectorLeft: selected ? `calc(24px + ${(((ORDER.indexOf(selected)) + 0.5) / 6).toFixed(4)} * (100% - 48px))` : '50%',
+      panelBorder: selected ? `color-mix(in oklab, ${PHUE[selected]}, transparent 50%)` : 'var(--border-subtle)',
+      drillReleases, allReleases, metrics, connections, attention,
+      jobOptions: [{ value: 'all', label: 'All jobs' }, { value: 'tv', label: 'tv-shows' }, { value: 'mov', label: 'movies' }],
+      phaseOptions: [{ value: 'all', label: 'All phases' }, { value: 'transfer', label: 'Transfer' }, { value: 'import', label: 'Import' }],
+      rate: this.state.rate.toFixed(1),
+      sync: this.state.sync,
+      selectPhase: (p) => this.setState((s) => ({ selectedPhase: s.selectedPhase === p ? null : p })),
+      clearPhase: () => this.setState({ selectedPhase: null }),
+      showRail: () => this.setState({ viewMode: 'rail' }),
+      showList: () => this.setState({ viewMode: 'list' }),
+      railBtnStyle: seg(this.state.viewMode === 'rail'),
+      listBtnStyle: seg(this.state.viewMode === 'list'),
+    };
+  }
+}
+</script>
+</body>
+</html>

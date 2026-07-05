@@ -3,7 +3,6 @@ using System.Net.Http.Json;
 using FakeItEasy;
 using FluentAssertions;
 using Harrbor.Api.Releases;
-using Harrbor.Configuration;
 using Harrbor.Data.Entities;
 using Harrbor.Tests.Common;
 using Harrbor.Tests.Integration.Helpers;
@@ -16,10 +15,12 @@ public class ReleaseActionEndpointsTests : IDisposable
 {
     private readonly HarrborWebApplicationFactory _factory = new();
     private readonly HttpClient _client;
+    private readonly HarrborWebApplicationFactory.SeededConnections _connections;
 
     public ReleaseActionEndpointsTests()
     {
         _client = _factory.CreateClient();
+        _connections = _factory.SeedDefaultConnectionsAsync().GetAwaiter().GetResult();
     }
 
     public void Dispose()
@@ -28,17 +29,19 @@ public class ReleaseActionEndpointsTests : IDisposable
         _factory.Dispose();
     }
 
-    private async Task<int> SeedAsync(TrackedRelease release, ServiceType serviceType = ServiceType.Sonarr)
+    private async Task<int> SeedAsync(TrackedRelease release)
     {
         await using var db = _factory.CreateDbContext();
         db.Jobs.Add(new Job
         {
             Name = "tv-shows",
             Enabled = true,
-            ServiceType = serviceType,
+            MediaServiceConnectionId = _connections.Sonarr,
+            DownloadClientConnectionId = _connections.QBittorrent,
+            RemoteStorageConnectionId = _connections.RemoteStorage,
             RemotePath = "/r",
             StagingPath = "/s",
-            QBittorrentCategory = "tv",
+            Category = "tv",
             MaxTransferRetries = 3,
             TransferRetryDelay = TimeSpan.FromMinutes(5),
             ImportTimeout = TimeSpan.FromHours(24)

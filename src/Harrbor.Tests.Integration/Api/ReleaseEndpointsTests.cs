@@ -13,10 +13,12 @@ public class ReleaseEndpointsTests : IDisposable
 {
     private readonly HarrborWebApplicationFactory _factory = new();
     private readonly HttpClient _client;
+    private readonly HarrborWebApplicationFactory.SeededConnections _connections;
 
     public ReleaseEndpointsTests()
     {
         _client = _factory.CreateClient();
+        _connections = _factory.SeedDefaultConnectionsAsync().GetAwaiter().GetResult();
     }
 
     public void Dispose()
@@ -31,9 +33,12 @@ public class ReleaseEndpointsTests : IDisposable
         db.Jobs.Add(new Job
         {
             Name = "tv-shows",
+            MediaServiceConnectionId = _connections.Sonarr,
+            DownloadClientConnectionId = _connections.QBittorrent,
+            RemoteStorageConnectionId = _connections.RemoteStorage,
             RemotePath = "/r",
             StagingPath = "/s",
-            QBittorrentCategory = "tv",
+            Category = "tv",
             MaxTransferRetries = 3,
             TransferRetryDelay = TimeSpan.FromMinutes(5),
             ImportTimeout = TimeSpan.FromHours(24)

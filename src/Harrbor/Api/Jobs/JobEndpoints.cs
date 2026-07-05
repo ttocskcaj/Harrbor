@@ -1,5 +1,8 @@
+using Harrbor.Abstractions.Validation;
 using Harrbor.Data;
 using Harrbor.Data.Entities;
+using Harrbor.Services;
+using Harrbor.Services.Configuration;
 using Microsoft.EntityFrameworkCore;
 
 namespace Harrbor.Api.Jobs;
@@ -46,9 +49,12 @@ public static class JobEndpoints
     private static async Task<IResult> CreateJobAsync(
         JobRequest request,
         HarrborDbContext db,
+        IConnectionStore store,
+        IConnectionProviderRegistry registry,
         CancellationToken cancellationToken)
     {
         var errors = JobMapping.Validate(request);
+        await JobMapping.ValidateConnectionsAsync(request, store, registry, errors, cancellationToken);
 
         var name = request.Name.Trim();
         if (!errors.Has("name") && await NameTakenAsync(db, name, excludeId: null, cancellationToken))
@@ -108,12 +114,14 @@ public static class JobEndpoints
         {
             Name = name,
             Enabled = false,
-            ServiceType = source.ServiceType,
+            MediaServiceConnectionId = source.MediaServiceConnectionId,
+            DownloadClientConnectionId = source.DownloadClientConnectionId,
+            RemoteStorageConnectionId = source.RemoteStorageConnectionId,
             PollingInterval = source.PollingInterval,
             RemotePath = source.RemotePath,
             StagingPath = source.StagingPath,
-            QBittorrentCategory = source.QBittorrentCategory,
-            QBittorrentTags = [.. source.QBittorrentTags],
+            Category = source.Category,
+            Tags = [.. source.Tags],
             TransferParallelism = source.TransferParallelism,
             MaxTransferRetries = source.MaxTransferRetries,
             TransferRetryDelay = source.TransferRetryDelay,
@@ -134,6 +142,8 @@ public static class JobEndpoints
         int id,
         JobRequest request,
         HarrborDbContext db,
+        IConnectionStore store,
+        IConnectionProviderRegistry registry,
         CancellationToken cancellationToken)
     {
         var job = await db.Jobs.FirstOrDefaultAsync(j => j.Id == id, cancellationToken);
@@ -141,6 +151,7 @@ public static class JobEndpoints
             return Results.NotFound();
 
         var errors = JobMapping.Validate(request);
+        await JobMapping.ValidateConnectionsAsync(request, store, registry, errors, cancellationToken);
 
         var name = request.Name.Trim();
         if (!errors.Has("name") && await NameTakenAsync(db, name, excludeId: id, cancellationToken))

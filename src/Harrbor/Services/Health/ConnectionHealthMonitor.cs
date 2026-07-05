@@ -1,23 +1,19 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using Harrbor.Configuration.Connections;
-using Harrbor.Services.Clients;
 using Harrbor.Services.Configuration;
-using Harrbor.Services.RemoteStorage;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Harrbor.Services.Health;
 
 /// <summary>Live reachability of a connection.</summary>
 public enum ConnectionHealthStatus
 {
-    /// <summary>Not yet probed (unconfigured, or the monitor hasn't run its first check).</summary>
+    /// <summary>Not yet probed (the monitor hasn't run its first check for it).</summary>
     Unknown,
     Up,
     Degraded,
     Down,
 
-    /// <summary>Configured but intentionally disabled (Sonarr/Radarr with Enabled = false).</summary>
+    /// <summary>Configured but intentionally disabled.</summary>
     Disabled
 }
 
@@ -34,14 +30,14 @@ public sealed record ConnectionHealthState(
 public interface IConnectionHealthMonitor
 {
     /// <summary>The last known health of a connection; <see cref="ConnectionHealthState.NotChecked"/> if never probed.</summary>
-    ConnectionHealthState GetState(string connectionType);
+    ConnectionHealthState GetState(int connectionId);
 }
 
 /// <summary>
-/// Periodically probes each configured connection and caches the result so the dashboard
-/// and connections page can read live health without paying a round-trip per request.
-/// Mirrors the OrchestrationWorker pattern: a background loop that opens a DI scope per
-/// tick to resolve scoped clients.
+/// Periodically probes each enabled connection instance and caches the result so the dashboard and
+/// connections page can read live health without paying a round-trip per request. Health is keyed by
+/// connection id; each connection's provider decides how often it is probed (<c>ProbeEveryNTicks</c>).
+/// The store, registry, and connection manager are all singletons, so no per-tick DI scope is needed.
 /// </summary>
 public sealed class ConnectionHealthMonitor : BackgroundService, IConnectionHealthMonitor
 {
@@ -50,27 +46,30 @@ public sealed class ConnectionHealthMonitor : BackgroundService, IConnectionHeal
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(10);
     private const int DegradedLatencyMs = 5000;
 
-    // rclone spawns a process per probe, so check remote storage less often than the light HTTP probes.
-    private const int RemoteStorageEveryNTicks = 4;
-
-    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IConnectionStore _store;
+    private readonly IConnectionProviderRegistry _registry;
+    private readonly IConnectionManager _manager;
     private readonly ILogger<ConnectionHealthMonitor> _logger;
     private readonly TimeProvider _timeProvider;
 
-    private readonly ConcurrentDictionary<string, ConnectionHealthState> _states = new();
+    private readonly ConcurrentDictionary<int, ConnectionHealthState> _states = new();
 
     public ConnectionHealthMonitor(
-        IServiceScopeFactory scopeFactory,
+        IConnectionStore store,
+        IConnectionProviderRegistry registry,
+        IConnectionManager manager,
         ILogger<ConnectionHealthMonitor> logger,
         TimeProvider timeProvider)
     {
-        _scopeFactory = scopeFactory;
+        _store = store;
+        _registry = registry;
+        _manager = manager;
         _logger = logger;
         _timeProvider = timeProvider;
     }
 
-    public ConnectionHealthState GetState(string connectionType)
-        => _states.GetValueOrDefault(connectionType, ConnectionHealthState.NotChecked);
+    public ConnectionHealthState GetState(int connectionId)
+        => _states.GetValueOrDefault(connectionId, ConnectionHealthState.NotChecked);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -118,78 +117,54 @@ public sealed class ConnectionHealthMonitor : BackgroundService, IConnectionHeal
     }
 
     /// <summary>
-    /// Runs one round of health probes. Internal so tests can drive a deterministic
-    /// single tick rather than waiting on the background loop.
+    /// Runs one round of health probes over all connection instances. Internal so tests can drive a
+    /// deterministic single tick rather than waiting on the background loop.
     /// </summary>
     internal async Task RunChecksAsync(long tick, CancellationToken cancellationToken)
     {
-        await using var scope = _scopeFactory.CreateAsyncScope();
-        var services = scope.ServiceProvider;
-        var store = services.GetRequiredService<IConnectionStore>();
+        var connections = await _store.GetAllAsync(cancellationToken);
+        var seen = new HashSet<int>();
 
-        // qBittorrent (singleton client with a cached session — safe to poll frequently)
-        if (await store.IsConfiguredAsync(ConnectionTypes.QBittorrent, cancellationToken))
+        foreach (var connection in connections)
         {
-            var client = services.GetRequiredService<IQBittorrentClient>();
-            await ProbeAsync(ConnectionTypes.QBittorrent, cancellationToken, async token =>
-                await client.IsConnectedAsync(token)
-                    ? (true, null)
-                    : (false, "Could not authenticate with qBittorrent"));
-        }
-        else
-        {
-            _states[ConnectionTypes.QBittorrent] = ConnectionHealthState.NotChecked;
-        }
+            seen.Add(connection.Id);
 
-        await CheckServarrAsync<SonarrSettings, ISonarrClient>(ConnectionTypes.Sonarr, store, services, cancellationToken);
-        await CheckServarrAsync<RadarrSettings, IRadarrClient>(ConnectionTypes.Radarr, store, services, cancellationToken);
-
-        // Remote storage is heavy (rclone process) — probe on a longer sub-interval and keep the
-        // previous state in between ticks.
-        if (tick % RemoteStorageEveryNTicks == 0)
-        {
-            if (await store.IsConfiguredAsync(ConnectionTypes.RemoteStorage, cancellationToken))
+            var provider = _registry.Find(connection.ProviderKey);
+            if (provider is null)
             {
-                var remote = services.GetRequiredService<IRemoteStorageService>();
-                await ProbeAsync(ConnectionTypes.RemoteStorage, cancellationToken, async token =>
-                {
-                    var result = await remote.TestConnectionAsync(token);
-                    return (result.Success, result.Error);
-                });
+                _states[connection.Id] = new ConnectionHealthState(
+                    ConnectionHealthStatus.Down, _timeProvider.GetUtcNow().UtcDateTime, null,
+                    $"Unknown provider '{connection.ProviderKey}'");
+                continue;
             }
-            else
+
+            if (!connection.Enabled)
             {
-                _states[ConnectionTypes.RemoteStorage] = ConnectionHealthState.NotChecked;
+                _states[connection.Id] = new ConnectionHealthState(
+                    ConnectionHealthStatus.Disabled, _timeProvider.GetUtcNow().UtcDateTime, null, null);
+                continue;
             }
-        }
-    }
 
-    private async Task CheckServarrAsync<TSettings, TClient>(
-        string type, IConnectionStore store, IServiceProvider services, CancellationToken cancellationToken)
-        where TSettings : ServarrSettings, IConnectionSettings, new()
-        where TClient : class, IMediaService
-    {
-        var stored = await store.GetAsync<TSettings>(cancellationToken);
-        if (stored is null)
-        {
-            _states[type] = ConnectionHealthState.NotChecked;
-            return;
-        }
+            // Heavy probes (e.g. rclone, which spawns a process) run on a longer sub-interval and
+            // keep their previously cached state in between.
+            if (provider.ProbeEveryNTicks > 1 && tick % provider.ProbeEveryNTicks != 0 && _states.ContainsKey(connection.Id))
+                continue;
 
-        if (!stored.Settings.Enabled)
-        {
-            _states[type] = new ConnectionHealthState(
-                ConnectionHealthStatus.Disabled, _timeProvider.GetUtcNow().UtcDateTime, null, null);
-            return;
+            await ProbeAsync(connection.Id, cancellationToken, async probeToken =>
+            {
+                var client = await _manager.GetClientAsync(connection, probeToken);
+                var result = await provider.ProbeAsync(client, probeToken);
+                return (result.Ok, result.Error);
+            });
         }
 
-        var client = services.GetRequiredService<TClient>();
-        await ProbeAsync(type, cancellationToken, async token =>
-            await client.IsHealthyAsync(token) ? (true, null) : (false, $"{type} health check failed"));
+        // Drop cached state for connections that no longer exist.
+        foreach (var staleId in _states.Keys.Where(id => !seen.Contains(id)).ToList())
+            _states.TryRemove(staleId, out _);
     }
 
     private async Task ProbeAsync(
-        string type,
+        int connectionId,
         CancellationToken cancellationToken,
         Func<CancellationToken, Task<(bool ok, string? error)>> probe)
     {
@@ -204,7 +179,7 @@ public sealed class ConnectionHealthMonitor : BackgroundService, IConnectionHeal
             stopwatch.Stop();
             var latencyMs = (int)stopwatch.ElapsedMilliseconds;
 
-            _states[type] = ok
+            _states[connectionId] = ok
                 ? new ConnectionHealthState(
                     latencyMs > DegradedLatencyMs ? ConnectionHealthStatus.Degraded : ConnectionHealthStatus.Up,
                     now, latencyMs, null)
@@ -216,12 +191,12 @@ public sealed class ConnectionHealthMonitor : BackgroundService, IConnectionHeal
         }
         catch (OperationCanceledException)
         {
-            _states[type] = new ConnectionHealthState(
+            _states[connectionId] = new ConnectionHealthState(
                 ConnectionHealthStatus.Down, now, null, $"Timed out after {ProbeTimeout.TotalSeconds:0}s");
         }
         catch (Exception ex)
         {
-            _states[type] = new ConnectionHealthState(ConnectionHealthStatus.Down, now, null, ex.Message);
+            _states[connectionId] = new ConnectionHealthState(ConnectionHealthStatus.Down, now, null, ex.Message);
         }
     }
 }

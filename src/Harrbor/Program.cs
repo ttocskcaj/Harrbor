@@ -1,19 +1,18 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using Serilog;
 using Harrbor.Api;
 using Harrbor.Configuration;
 using Harrbor.Data;
 using Harrbor.Data.Entities;
 using Harrbor.Services;
-using Harrbor.Services.Clients;
 using Harrbor.Services.Configuration;
 using Harrbor.Services.Health;
 using Harrbor.Services.Orchestration;
-using Harrbor.Services.RemoteStorage;
 using Harrbor.Services.Orchestration.Phases;
+using Harrbor.Services.RemoteStorage;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Serilog;
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
@@ -56,15 +55,12 @@ try
     // Services
     builder.Services.AddSingleton<IConnectionStore, ConnectionStore>();
     builder.Services.AddSingleton<ITransferProgressTracker, TransferProgressTracker>();
-    builder.Services.AddSingleton<IQBittorrentClient, QBittorrentClientWrapper>();
-    builder.Services.AddScoped<IRemoteStorageService, RcloneRemoteStorageService>();
-    builder.Services.AddScoped<IMediaServiceResolver, MediaServiceResolver>();
 
-    builder.Services.AddHttpClient<ISonarrClient, SonarrClient>()
-        .AddStandardResilienceHandler();
-
-    builder.Services.AddHttpClient<IRadarrClient, RadarrClient>()
-        .AddStandardResilienceHandler();
+    // Connection providers (the code-defined "kinds") are registered in a provider registry. The
+    // connection manager builds/caches live clients per connection instance (by id) at runtime,
+    // replacing keyed DI and the per-category resolvers.
+    builder.Services.AddConnectionProviders();
+    builder.Services.AddSingleton<IConnectionManager, ConnectionManager>();
 
     // Phase Handlers
     builder.Services.AddScoped<IDiscoveryPhaseHandler, DiscoveryPhaseHandler>();
@@ -121,7 +117,7 @@ try
             }
             await db.SaveChangesAsync();
 
-            var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+            var logger = scope.ServiceProvider.GetRequiredService<ILogger<Harrbor.Program>>();
             logger.LogInformation(
                 "Reset {Count} stuck transfers to Pending state",
                 stuckTransfers.Count);
@@ -169,4 +165,7 @@ finally
 }
 
 // Exposes the entry point to WebApplicationFactory-based integration tests
-public partial class Program { }
+namespace Harrbor
+{
+    public partial class Program { }
+}

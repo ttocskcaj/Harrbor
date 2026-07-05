@@ -1,9 +1,8 @@
 using FakeItEasy;
 using FluentAssertions;
-using Harrbor.Configuration;
+using Harrbor.Abstractions.Clients;
 using Harrbor.Data.Entities;
 using Harrbor.Services;
-using Harrbor.Services.Clients;
 using Harrbor.Services.Orchestration.Phases;
 using Harrbor.Tests.Common;
 using Harrbor.Tests.Unit.Helpers;
@@ -19,23 +18,19 @@ namespace Harrbor.Tests.Unit.Services.Orchestration;
 /// </summary>
 public class ImportPhaseTests
 {
-    private readonly IMediaServiceResolver _mediaServiceResolver;
     private readonly IMediaService _mediaService;
     private readonly ILogger<ImportPhaseHandler> _logger;
 
     public ImportPhaseTests()
     {
         _mediaService = A.Fake<IMediaService>();
-        _mediaServiceResolver = A.Fake<IMediaServiceResolver>();
         _logger = A.Fake<ILogger<ImportPhaseHandler>>();
-
-        A.CallTo(() => _mediaServiceResolver.GetServiceForJob(A<JobDefinition>._))
-            .Returns(_mediaService);
     }
 
+    // The tests drive the client-injecting overload directly, so the manager is never invoked.
     private ImportPhaseHandler CreateHandler()
     {
-        return new ImportPhaseHandler(_mediaServiceResolver, _logger);
+        return new ImportPhaseHandler(A.Fake<IConnectionManager>(), _logger);
     }
 
     [Fact]

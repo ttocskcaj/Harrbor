@@ -1,4 +1,4 @@
-namespace Harrbor.Api;
+namespace Harrbor.Abstractions.Validation;
 
 /// <summary>
 /// Accumulates field-level validation errors keyed by camelCase field name,

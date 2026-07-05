@@ -1,9 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json.Nodes;
 using FakeItEasy;
 using FluentAssertions;
 using Harrbor.Api.Connections;
-using Harrbor.Services.Clients;
 using Harrbor.Services.Health;
 using Harrbor.Tests.Common;
 using Harrbor.Tests.Integration.Helpers;
@@ -28,111 +28,122 @@ public class ConnectionHealthEndpointsTests : IDisposable
         _factory.Dispose();
     }
 
+    private async Task<ConnectionResponse> CreateQBittorrentAsync()
+        => (await (await _client.PostAsJsonAsync("/api/connections", new ConnectionCreateRequest
+        {
+            ProviderKey = "qbittorrent",
+            Name = "qBittorrent",
+            Settings = new JsonObject { ["baseUrl"] = "http://qbt:8080", ["username"] = "admin", ["password"] = "s3cret" },
+        })).Content.ReadFromJsonAsync<ConnectionResponse>(TestJson.Options))!;
+
     [Fact]
-    public async Task GetHealth_Unconfigured_ReportsAllTypesUnknown()
+    public async Task GetHealth_NoConnections_ReturnsEmpty()
     {
         var health = await _client.GetFromJsonAsync<List<ConnectionHealth>>("/api/connections/health", TestJson.Options);
 
-        health!.Select(h => h.Type).Should().BeEquivalentTo("qbittorrent", "sonarr", "radarr", "remoteStorage");
-        health.Should().OnlyContain(h => !h.Configured && h.Status == ConnectionHealthStatus.Unknown);
+        health.Should().BeEmpty();
     }
 
     [Fact]
     public async Task GetHealth_AfterMonitorTick_ReflectsReachability()
     {
         A.CallTo(() => _factory.QBittorrentClient.IsConnectedAsync(A<CancellationToken>._)).Returns(true);
+        var created = await CreateQBittorrentAsync();
 
-        await _client.PutAsJsonAsync("/api/connections/qbittorrent", new QBittorrentConnectionRequest
-        {
-            BaseUrl = "http://qbt:8080",
-            Username = "admin",
-            Password = "s3cret"
-        });
-
-        // Drive one deterministic probe round instead of waiting on the background loop.
         var monitor = _factory.Services.GetRequiredService<ConnectionHealthMonitor>();
         await monitor.RunChecksAsync(0, CancellationToken.None);
 
         var health = await _client.GetFromJsonAsync<List<ConnectionHealth>>("/api/connections/health", TestJson.Options);
-
-        var qbit = health!.Single(h => h.Type == "qbittorrent");
-        qbit.Configured.Should().BeTrue();
+        var qbit = health!.Single(h => h.Id == created.Id);
         qbit.Status.Should().Be(ConnectionHealthStatus.Up);
         qbit.CheckedAtUtc.Should().NotBeNull();
     }
 
     [Fact]
-    public async Task GetHealth_UnreachableQBittorrent_ReportsDown()
+    public async Task GetHealth_Unreachable_ReportsDown()
     {
         A.CallTo(() => _factory.QBittorrentClient.IsConnectedAsync(A<CancellationToken>._)).Returns(false);
+        var created = await CreateQBittorrentAsync();
 
-        await _client.PutAsJsonAsync("/api/connections/qbittorrent", new QBittorrentConnectionRequest
+        var monitor = _factory.Services.GetRequiredService<ConnectionHealthMonitor>();
+        await monitor.RunChecksAsync(0, CancellationToken.None);
+
+        var health = await _client.GetFromJsonAsync<List<ConnectionHealth>>("/api/connections/health", TestJson.Options);
+        health!.Single(h => h.Id == created.Id).Status.Should().Be(ConnectionHealthStatus.Down);
+    }
+
+    [Fact]
+    public async Task GetHealth_DisabledConnection_ReportsDisabled()
+    {
+        var created = await CreateQBittorrentAsync();
+        await _client.PutAsJsonAsync($"/api/connections/{created.Id}", new ConnectionUpdateRequest
         {
-            BaseUrl = "http://qbt:8080",
-            Username = "admin",
-            Password = "s3cret"
+            Enabled = false,
+            Settings = new JsonObject { ["baseUrl"] = "http://qbt:8080", ["username"] = "admin" },
         });
 
         var monitor = _factory.Services.GetRequiredService<ConnectionHealthMonitor>();
         await monitor.RunChecksAsync(0, CancellationToken.None);
 
         var health = await _client.GetFromJsonAsync<List<ConnectionHealth>>("/api/connections/health", TestJson.Options);
-        health!.Single(h => h.Type == "qbittorrent").Status.Should().Be(ConnectionHealthStatus.Down);
+        health!.Single(h => h.Id == created.Id).Status.Should().Be(ConnectionHealthStatus.Disabled);
     }
 
     [Fact]
-    public async Task PutQBittorrent_StaleExpectedVersion_Returns412()
+    public async Task Update_StaleExpectedVersion_Returns412()
     {
-        var put = await _client.PutAsJsonAsync("/api/connections/qbittorrent", new QBittorrentConnectionRequest
-        {
-            BaseUrl = "http://qbt:8080",
-            Username = "admin",
-            Password = "s3cret"
-        });
-        var saved = await put.Content.ReadFromJsonAsync<QBittorrentConnectionResponse>(TestJson.Options);
+        var created = await CreateQBittorrentAsync();
 
-        var stale = await _client.PutAsJsonAsync("/api/connections/qbittorrent", new QBittorrentConnectionRequest
+        var stale = await _client.PutAsJsonAsync($"/api/connections/{created.Id}", new ConnectionUpdateRequest
         {
-            BaseUrl = "http://qbt:9090",
-            Username = "admin",
-            ExpectedVersion = saved!.Version + 5
+            Settings = new JsonObject { ["baseUrl"] = "http://qbt:9090", ["username"] = "admin" },
+            ExpectedVersion = created.Version + 5,
         });
 
         stale.StatusCode.Should().Be(HttpStatusCode.PreconditionFailed);
     }
 
     [Fact]
-    public async Task PutQBittorrent_CurrentExpectedVersion_SavesAndBumpsVersion()
+    public async Task Update_CurrentExpectedVersion_SavesAndBumpsVersion()
     {
-        var put = await _client.PutAsJsonAsync("/api/connections/qbittorrent", new QBittorrentConnectionRequest
-        {
-            BaseUrl = "http://qbt:8080",
-            Username = "admin",
-            Password = "s3cret"
-        });
-        var saved = await put.Content.ReadFromJsonAsync<QBittorrentConnectionResponse>(TestJson.Options);
+        var created = await CreateQBittorrentAsync();
 
-        var ok = await _client.PutAsJsonAsync("/api/connections/qbittorrent", new QBittorrentConnectionRequest
+        var ok = await _client.PutAsJsonAsync($"/api/connections/{created.Id}", new ConnectionUpdateRequest
         {
-            BaseUrl = "http://qbt:9090",
-            Username = "admin",
-            ExpectedVersion = saved!.Version
+            Settings = new JsonObject { ["baseUrl"] = "http://qbt:9090", ["username"] = "admin" },
+            ExpectedVersion = created.Version,
         });
 
         ok.StatusCode.Should().Be(HttpStatusCode.OK);
-        var updated = await ok.Content.ReadFromJsonAsync<QBittorrentConnectionResponse>(TestJson.Options);
-        updated!.Version.Should().Be(saved.Version + 1);
-        updated.BaseUrl.Should().Be("http://qbt:9090");
+        var updated = await ok.Content.ReadFromJsonAsync<ConnectionResponse>(TestJson.Options);
+        updated!.Version.Should().Be(created.Version + 1);
+        updated.Settings["baseUrl"]!.GetValue<string>().Should().Be("http://qbt:9090");
     }
 
     [Fact]
-    public async Task GetQBittorrentCategories_ReturnsClientCategories()
+    public async Task GetCategories_ReturnsDownloadClientCategories()
     {
         A.CallTo(() => _factory.QBittorrentClient.GetCategoriesAsync(A<CancellationToken>._))
             .Returns(new[] { "tv-shows", "movies" });
+        var created = await CreateQBittorrentAsync();
 
-        var categories = await _client.GetFromJsonAsync<List<string>>("/api/connections/qbittorrent/categories", TestJson.Options);
+        var categories = await _client.GetFromJsonAsync<List<string>>($"/api/connections/{created.Id}/categories", TestJson.Options);
 
         categories.Should().BeEquivalentTo("tv-shows", "movies");
+    }
+
+    [Fact]
+    public async Task GetCategories_OnNonDownloadClient_Returns400()
+    {
+        var created = await (await _client.PostAsJsonAsync("/api/connections", new ConnectionCreateRequest
+        {
+            ProviderKey = "sonarr",
+            Name = "Sonarr",
+            Settings = new JsonObject { ["baseUrl"] = "http://sonarr:8989", ["apiKey"] = "k" },
+        })).Content.ReadFromJsonAsync<ConnectionResponse>(TestJson.Options);
+
+        var response = await _client.GetAsync($"/api/connections/{created!.Id}/categories");
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 }

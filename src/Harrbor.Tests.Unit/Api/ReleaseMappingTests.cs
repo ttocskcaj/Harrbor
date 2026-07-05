@@ -19,7 +19,7 @@ public class ReleaseMappingTests
         Name = "test-job",
         RemotePath = "/r",
         StagingPath = "/s",
-        QBittorrentCategory = "c",
+        Category = "c",
         MaxTransferRetries = maxRetries,
         TransferRetryDelay = retryDelay ?? TimeSpan.FromMinutes(5),
         ImportTimeout = importTimeout ?? TimeSpan.FromHours(24)

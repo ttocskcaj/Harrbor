@@ -2,7 +2,6 @@ using System.Net;
 using FakeItEasy;
 using FluentAssertions;
 using Harrbor.Services.Clients;
-using Harrbor.Services.Clients.Models;
 using Harrbor.Tests.Common;
 using Harrbor.Tests.Unit.Helpers;
 using Microsoft.Extensions.Logging;
@@ -340,30 +339,6 @@ public class MediaServiceClientBaseTests : IDisposable
     }
 
     [Fact]
-    public async Task GetQueueAsync_NotConfigured_ThrowsServiceNotConfigured()
-    {
-        using var handler = new MockHttpMessageHandler();
-        using var httpClient = handler.CreateClient();
-        var client = new TestMediaServiceClient(httpClient, A.Fake<ILogger<TestMediaServiceClient>>(), settings: null);
-
-        var act = async () => await client.GetQueueAsync();
-
-        await act.Should().ThrowAsync<Harrbor.Services.ServiceNotConfiguredException>();
-    }
-
-    [Fact]
-    public async Task IsHealthyAsync_NotConfigured_ReturnsFalse()
-    {
-        using var handler = new MockHttpMessageHandler();
-        using var httpClient = handler.CreateClient();
-        var client = new TestMediaServiceClient(httpClient, A.Fake<ILogger<TestMediaServiceClient>>(), settings: null);
-
-        var result = await client.IsHealthyAsync();
-
-        result.Should().BeFalse();
-    }
-
-    [Fact]
     public async Task GetQueueAsync_SetsApiKeyHeader()
     {
         // Arrange
@@ -385,20 +360,15 @@ public class MediaServiceClientBaseTests : IDisposable
 public class TestMediaServiceClient : MediaServiceClientBase, IDisposable
 {
     private readonly HttpClient _httpClient;
-    private readonly MediaServiceSettings? _settings;
 
     public TestMediaServiceClient(
         HttpClient httpClient,
         ILogger logger,
-        MediaServiceSettings? settings)
-        : base(httpClient, logger, "TestService")
+        MediaServiceSettings settings)
+        : base(httpClient, settings, logger, "TestService")
     {
         _httpClient = httpClient;
-        _settings = settings;
     }
-
-    protected override Task<MediaServiceSettings?> GetSettingsAsync(CancellationToken cancellationToken)
-        => Task.FromResult(_settings);
 
     protected override string GetQueueQueryParameters()
     {

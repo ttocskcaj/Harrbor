@@ -1,104 +1,68 @@
+using Harrbor.Abstractions.Clients;
+using Harrbor.Abstractions.Clients.Models;
 using Harrbor.Configuration.Connections;
-using Harrbor.Services.Configuration;
 using QBittorrent.Client;
 
 namespace Harrbor.Services.Clients;
 
-public class QBittorrentClientWrapper : IQBittorrentClient, IDisposable
+/// <summary>
+/// qBittorrent-backed <see cref="ITorrentClient"/>. Built from a single connection's settings by
+/// the connection manager, which caches one instance per connection id and rebuilds it (a fresh
+/// instance) when the connection's version stamp changes. Holds a login session, so it is stateful
+/// and disposable; only the login flag mutates after construction.
+/// </summary>
+public class QBittorrentTorrentClient : ITorrentClient, IDisposable
 {
-    /// <summary>
-    /// Immutable-per-version snapshot published atomically via a volatile
-    /// reference, so concurrent readers always see a consistent
-    /// client/settings/version triple. Only the login flag mutates.
-    /// </summary>
-    private sealed class ClientState(QBittorrentClient client, QBittorrentSettings settings, int version)
+    private readonly QBittorrentSettings _settings;
+    private readonly ILogger<QBittorrentTorrentClient> _logger;
+    private readonly QBittorrentClient _client;
+    private readonly SemaphoreSlim _loginSemaphore = new(1, 1);
+    private volatile bool _isLoggedIn;
+
+    public QBittorrentTorrentClient(
+        QBittorrentSettings settings,
+        ILogger<QBittorrentTorrentClient> logger)
     {
-        public QBittorrentClient Client { get; } = client;
-        public QBittorrentSettings Settings { get; } = settings;
-        public int Version { get; } = version;
-        public volatile bool IsLoggedIn;
-    }
-
-    private readonly IConnectionStore _connectionStore;
-    private readonly ILogger<QBittorrentClientWrapper> _logger;
-    private readonly SemaphoreSlim _clientSemaphore = new(1, 1);
-
-    // Rebuilt whenever the stored connection's version stamp changes
-    private volatile ClientState? _state;
-
-    public QBittorrentClientWrapper(
-        IConnectionStore connectionStore,
-        ILogger<QBittorrentClientWrapper> logger)
-    {
-        _connectionStore = connectionStore;
+        _settings = settings;
         _logger = logger;
+        _client = new QBittorrentClient(new Uri(settings.BaseUrl));
     }
 
-    private async Task<ClientState> GetStateAsync(CancellationToken cancellationToken)
-    {
-        var stamped = await _connectionStore.GetAsync<QBittorrentSettings>(cancellationToken)
-            ?? throw new ServiceNotConfiguredException("qBittorrent");
-
-        var state = _state;
-        if (state is not null && state.Version == stamped.Version)
-            return state;
-
-        await _clientSemaphore.WaitAsync(cancellationToken);
-        try
-        {
-            state = _state;
-            if (state is null || state.Version != stamped.Version)
-            {
-                // The previous client is deliberately not disposed: an in-flight
-                // operation on another thread may still hold it. Config changes
-                // are rare; the GC reclaims the old instance.
-                state = new ClientState(
-                    new QBittorrentClient(new Uri(stamped.Settings.BaseUrl)),
-                    stamped.Settings,
-                    stamped.Version);
-                _state = state;
-
-                _logger.LogInformation(
-                    "qBittorrent client (re)built for {BaseUrl} (config version {Version})",
-                    stamped.Settings.BaseUrl, stamped.Version);
-            }
-
-            return state;
-        }
-        finally
-        {
-            _clientSemaphore.Release();
-        }
-    }
+    private static TorrentSnapshot ToSnapshot(TorrentInfo t) => new(
+        t.Hash,
+        t.Name,
+        t.Progress,
+        t.ContentPath,
+        t.SavePath,
+        t.Category,
+        t.Tags is null ? [] : [.. t.Tags]);
 
     private async Task<QBittorrentClient> GetLoggedInClientAsync(CancellationToken cancellationToken)
     {
-        var state = await GetStateAsync(cancellationToken);
+        if (_isLoggedIn)
+            return _client;
 
-        if (state.IsLoggedIn)
-            return state.Client;
-
-        await _clientSemaphore.WaitAsync(cancellationToken);
+        await _loginSemaphore.WaitAsync(cancellationToken);
         try
         {
-            if (state.IsLoggedIn)
-                return state.Client;
+            if (_isLoggedIn)
+                return _client;
 
-            await state.Client.LoginAsync(state.Settings.Username, state.Settings.Password, cancellationToken);
-            state.IsLoggedIn = true;
+            await _client.LoginAsync(_settings.Username, _settings.Password, cancellationToken);
+            _isLoggedIn = true;
             _logger.LogDebug("Logged in to qBittorrent");
-            return state.Client;
+            return _client;
         }
         catch (QBittorrentClientRequestException ex)
         {
             _logger.LogError(
                 "qBittorrent login failed: {StatusCode} - {Message}. BaseUrl: {BaseUrl}, Username: {Username}",
-                ex.StatusCode, ex.Message, state.Settings.BaseUrl, state.Settings.Username);
+                ex.StatusCode, ex.Message, _settings.BaseUrl, _settings.Username);
             throw;
         }
         finally
         {
-            _clientSemaphore.Release();
+            _loginSemaphore.Release();
         }
     }
 
@@ -106,19 +70,18 @@ public class QBittorrentClientWrapper : IQBittorrentClient, IDisposable
     {
         if (ex.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
         {
-            var state = _state;
-            if (state is not null)
-                state.IsLoggedIn = false;
+            _isLoggedIn = false;
             _logger.LogDebug("qBittorrent session invalidated due to {StatusCode}", ex.StatusCode);
         }
     }
 
-    public async Task<IReadOnlyList<TorrentInfo>> GetTorrentListAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<TorrentSnapshot>> GetTorrentListAsync(CancellationToken cancellationToken = default)
     {
         var client = await GetLoggedInClientAsync(cancellationToken);
         try
         {
-            return await client.GetTorrentListAsync(new TorrentListQuery(), cancellationToken);
+            var torrents = await client.GetTorrentListAsync(new TorrentListQuery(), cancellationToken);
+            return [.. torrents.Select(ToSnapshot)];
         }
         catch (QBittorrentClientRequestException ex)
         {
@@ -130,7 +93,7 @@ public class QBittorrentClientWrapper : IQBittorrentClient, IDisposable
         }
     }
 
-    public async Task<IReadOnlyList<TorrentInfo>> GetTorrentListAsync(
+    public async Task<IReadOnlyList<TorrentSnapshot>> GetTorrentListAsync(
         string? category,
         IReadOnlyList<string>? tags,
         CancellationToken cancellationToken = default)
@@ -162,7 +125,7 @@ public class QBittorrentClientWrapper : IQBittorrentClient, IDisposable
                     .ToList();
             }
 
-            return torrents;
+            return [.. torrents.Select(ToSnapshot)];
         }
         catch (QBittorrentClientRequestException ex)
         {
@@ -174,13 +137,14 @@ public class QBittorrentClientWrapper : IQBittorrentClient, IDisposable
         }
     }
 
-    public async Task<TorrentInfo?> GetTorrentAsync(string hash, CancellationToken cancellationToken = default)
+    public async Task<TorrentSnapshot?> GetTorrentAsync(string hash, CancellationToken cancellationToken = default)
     {
         var client = await GetLoggedInClientAsync(cancellationToken);
         try
         {
             var torrents = await client.GetTorrentListAsync(new TorrentListQuery { Hashes = [hash] }, cancellationToken);
-            return torrents.FirstOrDefault();
+            var torrent = torrents.FirstOrDefault();
+            return torrent is null ? null : ToSnapshot(torrent);
         }
         catch (QBittorrentClientRequestException ex)
         {
@@ -283,10 +247,6 @@ public class QBittorrentClientWrapper : IQBittorrentClient, IDisposable
             await client.GetApiVersionAsync(cancellationToken);
             return true;
         }
-        catch (ServiceNotConfiguredException)
-        {
-            return false;
-        }
         catch (QBittorrentClientRequestException ex)
         {
             InvalidateLoginOnAuthError(ex);
@@ -301,21 +261,13 @@ public class QBittorrentClientWrapper : IQBittorrentClient, IDisposable
 
     public async Task<ConnectionTestResult> TestConnectionAsync(CancellationToken cancellationToken = default)
     {
-        var stamped = await _connectionStore.GetAsync<QBittorrentSettings>(cancellationToken);
-        if (stamped is null)
-            return new ConnectionTestResult(false, Error: "qBittorrent is not configured");
-
-        return await TestConnectionAsync(stamped.Settings, cancellationToken);
-    }
-
-    public async Task<ConnectionTestResult> TestConnectionAsync(QBittorrentSettings settings, CancellationToken cancellationToken = default)
-    {
-        _logger.LogDebug("Testing connection to qBittorrent at {BaseUrl}", settings.BaseUrl);
+        var baseUrl = _settings.BaseUrl;
+        _logger.LogDebug("Testing connection to qBittorrent at {BaseUrl}", baseUrl);
 
         try
         {
-            using var client = new QBittorrentClient(new Uri(settings.BaseUrl));
-            await client.LoginAsync(settings.Username, settings.Password, cancellationToken);
+            using var client = new QBittorrentClient(new Uri(baseUrl));
+            await client.LoginAsync(_settings.Username, _settings.Password, cancellationToken);
             var version = await client.GetApiVersionAsync(cancellationToken);
             return new ConnectionTestResult(true, Version: version.ToString());
         }
@@ -326,27 +278,28 @@ public class QBittorrentClientWrapper : IQBittorrentClient, IDisposable
         }
         catch (QBittorrentClientRequestException ex)
         {
-            return new ConnectionTestResult(false, Error: $"API error ({ex.StatusCode}) at {settings.BaseUrl}: {ex.Message}");
+            return new ConnectionTestResult(false, Error: $"API error ({ex.StatusCode}) at {baseUrl}: {ex.Message}");
         }
         catch (HttpRequestException ex)
         {
             var error = ex.InnerException?.Message ?? ex.Message;
-            return new ConnectionTestResult(false, Error: $"Cannot reach {settings.BaseUrl}: {error}");
+            return new ConnectionTestResult(false, Error: $"Cannot reach {baseUrl}: {error}");
         }
         catch (UriFormatException)
         {
-            return new ConnectionTestResult(false, Error: $"'{settings.BaseUrl}' is not a valid URL");
+            return new ConnectionTestResult(false, Error: $"'{baseUrl}' is not a valid URL");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "qBittorrent connectivity check failed");
-            return new ConnectionTestResult(false, Error: $"Error connecting to {settings.BaseUrl}: {ex.Message}");
+            return new ConnectionTestResult(false, Error: $"Error connecting to {baseUrl}: {ex.Message}");
         }
     }
 
     public void Dispose()
     {
-        _state?.Client.Dispose();
-        _clientSemaphore.Dispose();
+        _client.Dispose();
+        _loginSemaphore.Dispose();
+        GC.SuppressFinalize(this);
     }
 }

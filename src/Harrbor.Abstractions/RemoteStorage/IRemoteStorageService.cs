@@ -1,6 +1,4 @@
-using Harrbor.Configuration.Connections;
-
-namespace Harrbor.Services.RemoteStorage;
+namespace Harrbor.Abstractions.RemoteStorage;
 
 public record TransferResult(
     bool Success,
@@ -18,6 +16,10 @@ public sealed record RcloneProgress(
     long SpeedBytesPerSec,
     int? EtaSeconds);
 
+/// <summary>
+/// Abstraction over remote file storage (rclone/SFTP today). Built from a specific connection's
+/// settings, so connectivity tests use the client's own configured settings.
+/// </summary>
 public interface IRemoteStorageService
 {
     Task<TransferResult> TransferAsync(
@@ -29,9 +31,4 @@ public interface IRemoteStorageService
     Task<bool> ExistsAsync(string path, CancellationToken cancellationToken = default);
 
     Task<RemoteStorageConnectionResult> TestConnectionAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Tests connectivity using an explicit (possibly not-yet-saved) settings payload.
-    /// </summary>
-    Task<RemoteStorageConnectionResult> TestConnectionAsync(RemoteStorageSettings settings, CancellationToken cancellationToken = default);
 }

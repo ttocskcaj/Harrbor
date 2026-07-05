@@ -1,5 +1,4 @@
 using FluentAssertions;
-using Harrbor.Configuration.Connections;
 using Harrbor.Data.Entities;
 using Harrbor.Services.Configuration;
 using Harrbor.Tests.Integration.Helpers;
@@ -20,152 +19,76 @@ public class ConnectionStoreTests : IDisposable
 
     public void Dispose() => _dbFactory.Dispose();
 
-    [Fact]
-    public async Task GetAsync_ReturnsNull_WhenNotConfigured()
-    {
-        var result = await _store.GetAsync<QBittorrentSettings>();
+    private static Connection New(string providerKey = "sonarr", string name = "Sonarr", string json = "{}")
+        => new() { ProviderKey = providerKey, Name = name, SettingsJson = json, Enabled = true };
 
-        result.Should().BeNull();
+    [Fact]
+    public async Task GetByIdAsync_ReturnsNull_WhenAbsent()
+        => (await _store.GetByIdAsync(999)).Should().BeNull();
+
+    [Fact]
+    public async Task CreateAsync_AssignsIdAndVersionOne()
+    {
+        var created = await _store.CreateAsync(New());
+
+        created.Id.Should().BeGreaterThan(0);
+        created.Version.Should().Be(1);
+        (await _store.GetByIdAsync(created.Id)).Should().NotBeNull();
     }
 
     [Fact]
-    public async Task SaveAsync_ThenGetAsync_RoundTripsQBittorrentSettings()
+    public async Task CreateAsync_AllowsManyConnectionsPerProvider()
     {
-        var settings = new QBittorrentSettings
-        {
-            BaseUrl = "http://qbt:8080",
-            Username = "admin",
-            Password = "s3cret"
-        };
+        var a = await _store.CreateAsync(New(name: "Main Sonarr"));
+        var b = await _store.CreateAsync(New(name: "4K Sonarr"));
 
-        await _store.SaveAsync(settings);
-        var result = await _store.GetAsync<QBittorrentSettings>();
-
-        result.Should().NotBeNull();
-        result!.Settings.BaseUrl.Should().Be("http://qbt:8080");
-        result.Settings.Username.Should().Be("admin");
-        result.Settings.Password.Should().Be("s3cret");
+        a.Id.Should().NotBe(b.Id);
+        (await _store.GetAllAsync()).Should().HaveCount(2);
     }
 
     [Fact]
-    public async Task SaveAsync_ThenGetAsync_RoundTripsRemoteStorageSettings()
+    public async Task UpdateAsync_BumpsVersionAndPersistsFields()
     {
-        var settings = new RemoteStorageSettings
-        {
-            Host = "seedbox.example.com",
-            Port = 2222,
-            User = "jack",
-            Password = null,
-            KeyFile = "/keys/id_ed25519",
-            KeyFilePassphrase = "phrase",
-            UseAgent = true,
-            Transfers = 8,
-            Checkers = 16,
-            AdditionalFlags = ["--fast-list", "--sftp-disable-hashcheck"]
-        };
+        var created = await _store.CreateAsync(New(json: """{"baseUrl":"http://old"}"""));
 
-        await _store.SaveAsync(settings);
-        var result = await _store.GetAsync<RemoteStorageSettings>();
+        var updated = await _store.UpdateAsync(created.Id, "Renamed", enabled: false, """{"baseUrl":"http://new"}""");
 
-        result.Should().NotBeNull();
-        result!.Settings.Should().BeEquivalentTo(settings);
+        updated!.Version.Should().Be(2);
+        updated.Name.Should().Be("Renamed");
+        updated.Enabled.Should().BeFalse();
+        updated.SettingsJson.Should().Contain("http://new");
     }
 
     [Fact]
-    public async Task SaveAsync_IncrementsVersion_OnEachSave()
+    public async Task UpdateAsync_ReturnsNull_WhenAbsent()
+        => (await _store.UpdateAsync(999, "x", true, "{}")).Should().BeNull();
+
+    [Fact]
+    public async Task DeleteAsync_RemovesRow()
     {
-        var first = await _store.SaveAsync(new SonarrSettings { BaseUrl = "http://sonarr:8989" });
-        var second = await _store.SaveAsync(new SonarrSettings { BaseUrl = "http://sonarr:9999" });
+        var created = await _store.CreateAsync(New());
 
-        second.Version.Should().BeGreaterThan(first.Version);
-
-        var result = await _store.GetAsync<SonarrSettings>();
-        result!.Version.Should().Be(second.Version);
+        (await _store.DeleteAsync(created.Id)).Should().BeTrue();
+        (await _store.GetByIdAsync(created.Id)).Should().BeNull();
     }
 
     [Fact]
-    public async Task SaveAsync_UpsertsSingleRowPerType()
+    public async Task Schema_EnforcesUniqueNamePerProvider()
     {
-        await _store.SaveAsync(new SonarrSettings { BaseUrl = "http://old" });
-        await _store.SaveAsync(new SonarrSettings { BaseUrl = "http://new" });
+        await _store.CreateAsync(New(name: "Dup"));
 
-        await using var context = _dbFactory.CreateDbContext();
-        var rows = await context.ServiceConnections
-            .Where(c => c.Type == ConnectionTypes.Sonarr)
-            .ToListAsync();
-
-        rows.Should().HaveCount(1);
-
-        var result = await _store.GetAsync<SonarrSettings>();
-        result!.Settings.BaseUrl.Should().Be("http://new");
-    }
-
-    [Fact]
-    public async Task SaveAsync_KeepsConnectionTypesIndependent()
-    {
-        await _store.SaveAsync(new SonarrSettings { BaseUrl = "http://sonarr:8989", ApiKey = "sonarr-key" });
-        await _store.SaveAsync(new RadarrSettings { BaseUrl = "http://radarr:7878", ApiKey = "radarr-key" });
-
-        var sonarr = await _store.GetAsync<SonarrSettings>();
-        var radarr = await _store.GetAsync<RadarrSettings>();
-
-        sonarr!.Settings.ApiKey.Should().Be("sonarr-key");
-        radarr!.Settings.ApiKey.Should().Be("radarr-key");
-    }
-
-    [Fact]
-    public async Task GetAsync_IgnoresUnknownJsonFields()
-    {
-        await using (var context = _dbFactory.CreateDbContext())
-        {
-            context.ServiceConnections.Add(new ServiceConnection
-            {
-                Type = ConnectionTypes.QBittorrent,
-                SettingsJson = """{"BaseUrl":"http://qbt:8080","Username":"admin","Password":"pw","RemovedField":42}""",
-                Version = 1,
-                UpdatedAtUtc = DateTime.UtcNow
-            });
-            await context.SaveChangesAsync();
-        }
-
-        var result = await _store.GetAsync<QBittorrentSettings>();
-
-        result.Should().NotBeNull();
-        result!.Settings.BaseUrl.Should().Be("http://qbt:8080");
-    }
-
-    [Fact]
-    public async Task IsConfiguredAsync_ReflectsSavedState()
-    {
-        (await _store.IsConfiguredAsync(ConnectionTypes.QBittorrent)).Should().BeFalse();
-
-        await _store.SaveAsync(new QBittorrentSettings { BaseUrl = "http://qbt:8080" });
-
-        (await _store.IsConfiguredAsync(ConnectionTypes.QBittorrent)).Should().BeTrue();
-        (await _store.IsConfiguredAsync(ConnectionTypes.Sonarr)).Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task Schema_EnforcesUniqueConnectionType()
-    {
-        await using var context = _dbFactory.CreateDbContext();
-        context.ServiceConnections.Add(new ServiceConnection
-        {
-            Type = ConnectionTypes.Sonarr,
-            SettingsJson = "{}",
-            Version = 1,
-            UpdatedAtUtc = DateTime.UtcNow
-        });
-        context.ServiceConnections.Add(new ServiceConnection
-        {
-            Type = ConnectionTypes.Sonarr,
-            SettingsJson = "{}",
-            Version = 1,
-            UpdatedAtUtc = DateTime.UtcNow
-        });
-
-        var act = async () => await context.SaveChangesAsync();
+        var act = async () => await _store.CreateAsync(New(name: "Dup"));
 
         await act.Should().ThrowAsync<DbUpdateException>();
+    }
+
+    [Fact]
+    public async Task Schema_AllowsSameNameAcrossProviders()
+    {
+        await _store.CreateAsync(New(providerKey: "sonarr", name: "Main"));
+
+        var act = async () => await _store.CreateAsync(New(providerKey: "radarr", name: "Main"));
+
+        await act.Should().NotThrowAsync();
     }
 }

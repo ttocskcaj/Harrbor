@@ -1,8 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using Harrbor.Api.Connections;
+using Harrbor.Api.Jobs;
 using Harrbor.Tests.Common;
 using Harrbor.Tests.Integration.Helpers;
 using Xunit;
@@ -25,99 +27,105 @@ public class ConnectionEndpointsTests : IDisposable
         _factory.Dispose();
     }
 
-    [Fact]
-    public async Task GetOverview_ListsAllFourTypesUnconfigured()
+    private static ConnectionCreateRequest QbitRequest(string name, string? password = "s3cret") => new()
     {
-        var response = await _client.GetAsync("/api/connections");
+        ProviderKey = "qbittorrent",
+        Name = name,
+        Settings = new JsonObject { ["baseUrl"] = "http://qbt:8080", ["username"] = "admin", ["password"] = password },
+    };
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var overview = await response.Content.ReadFromJsonAsync<List<ConnectionSummaryResponse>>(TestJson.Options);
-        overview.Should().HaveCount(4);
-        overview!.Select(c => c.Type).Should().BeEquivalentTo(
-            "qbittorrent", "sonarr", "radarr", "remoteStorage");
-        overview.Should().OnlyContain(c => !c.Configured);
+    private async Task<ConnectionResponse> CreateAsync(ConnectionCreateRequest request)
+    {
+        var response = await _client.PostAsJsonAsync("/api/connections", request);
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        return (await response.Content.ReadFromJsonAsync<ConnectionResponse>(TestJson.Options))!;
     }
 
     [Fact]
-    public async Task GetQBittorrent_Returns404_WhenUnconfigured()
+    public async Task GetProviders_ReturnsBuiltInProvidersWithSchema()
     {
-        var response = await _client.GetAsync("/api/connections/qbittorrent");
+        var providers = await _client.GetFromJsonAsync<List<ProviderResponse>>("/api/connections/providers", TestJson.Options);
 
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        providers!.Select(p => p.Key).Should().BeEquivalentTo("qbittorrent", "sonarr", "radarr", "rclone-sftp");
+        var sonarr = providers.Single(p => p.Key == "sonarr");
+        sonarr.Fields.Should().Contain(f => f.Name == "apiKey" && f.Secret);
+        sonarr.Fields.Should().Contain(f => f.Name == "baseUrl" && f.Required);
     }
 
     [Fact]
-    public async Task PutQBittorrent_ThenGet_HidesSecretButReportsItSet()
+    public async Task List_IsEmpty_OnFreshInstall()
     {
-        var put = await _client.PutAsJsonAsync("/api/connections/qbittorrent", new QBittorrentConnectionRequest
-        {
-            BaseUrl = "http://qbt:8080",
-            Username = "admin",
-            Password = "s3cret"
-        });
-        put.StatusCode.Should().Be(HttpStatusCode.OK);
+        var list = await _client.GetFromJsonAsync<List<ConnectionResponse>>("/api/connections", TestJson.Options);
 
-        var get = await _client.GetAsync("/api/connections/qbittorrent");
-        get.StatusCode.Should().Be(HttpStatusCode.OK);
+        list.Should().BeEmpty();
+    }
 
-        var raw = await get.Content.ReadAsStringAsync();
+    [Fact]
+    public async Task Create_AllowsMultipleConnectionsPerProvider()
+    {
+        var first = await CreateAsync(QbitRequest("Main"));
+        var second = await CreateAsync(QbitRequest("Backup"));
+
+        first.Id.Should().NotBe(second.Id);
+        var list = await _client.GetFromJsonAsync<List<ConnectionResponse>>("/api/connections", TestJson.Options);
+        list!.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task Create_ThenGet_HidesSecretButReportsSet()
+    {
+        var created = await CreateAsync(QbitRequest("Main"));
+
+        var raw = await (await _client.GetAsync($"/api/connections/{created.Id}")).Content.ReadAsStringAsync();
         raw.Should().NotContain("s3cret");
 
         var body = JsonSerializer.Deserialize<JsonElement>(raw);
-        body.GetProperty("baseUrl").GetString().Should().Be("http://qbt:8080");
-        body.GetProperty("passwordSet").GetBoolean().Should().BeTrue();
-        body.TryGetProperty("password", out _).Should().BeFalse();
+        var settings = body.GetProperty("settings");
+        settings.GetProperty("baseUrl").GetString().Should().Be("http://qbt:8080");
+        settings.GetProperty("passwordSet").GetBoolean().Should().BeTrue();
+        settings.TryGetProperty("password", out _).Should().BeFalse();
     }
 
     [Fact]
-    public async Task PutQBittorrent_WithoutPassword_KeepsStoredSecret()
+    public async Task Update_WithoutSecret_KeepsStored()
     {
-        await _client.PutAsJsonAsync("/api/connections/qbittorrent", new QBittorrentConnectionRequest
-        {
-            BaseUrl = "http://qbt:8080",
-            Username = "admin",
-            Password = "s3cret"
-        });
+        var created = await CreateAsync(QbitRequest("Main"));
 
-        // Password omitted (null) — must keep the stored one
-        await _client.PutAsJsonAsync("/api/connections/qbittorrent", new QBittorrentConnectionRequest
+        var update = new ConnectionUpdateRequest
         {
-            BaseUrl = "http://qbt:9090",
-            Username = "admin2",
-            Password = null
-        });
+            Settings = new JsonObject { ["baseUrl"] = "http://qbt:9090", ["username"] = "admin2" }, // password omitted
+        };
+        var response = await _client.PutAsJsonAsync($"/api/connections/{created.Id}", update);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await _client.GetFromJsonAsync<QBittorrentConnectionResponse>("/api/connections/qbittorrent");
-        result!.BaseUrl.Should().Be("http://qbt:9090");
-        result.Username.Should().Be("admin2");
-        result.PasswordSet.Should().BeTrue();
+        var body = await response.Content.ReadFromJsonAsync<ConnectionResponse>(TestJson.Options);
+        body!.Settings["baseUrl"]!.GetValue<string>().Should().Be("http://qbt:9090");
+        body.Settings["passwordSet"]!.GetValue<bool>().Should().BeTrue();
     }
 
     [Fact]
-    public async Task PutQBittorrent_WithEmptyPassword_ClearsSecret()
+    public async Task Update_WithEmptySecret_Clears()
     {
-        await _client.PutAsJsonAsync("/api/connections/qbittorrent", new QBittorrentConnectionRequest
-        {
-            BaseUrl = "http://qbt:8080",
-            Password = "s3cret"
-        });
+        var created = await CreateAsync(QbitRequest("Main"));
 
-        await _client.PutAsJsonAsync("/api/connections/qbittorrent", new QBittorrentConnectionRequest
+        var update = new ConnectionUpdateRequest
         {
-            BaseUrl = "http://qbt:8080",
-            Password = ""
-        });
+            Settings = new JsonObject { ["baseUrl"] = "http://qbt:8080", ["password"] = "" },
+        };
+        var body = await (await _client.PutAsJsonAsync($"/api/connections/{created.Id}", update))
+            .Content.ReadFromJsonAsync<ConnectionResponse>(TestJson.Options);
 
-        var result = await _client.GetFromJsonAsync<QBittorrentConnectionResponse>("/api/connections/qbittorrent");
-        result!.PasswordSet.Should().BeFalse();
+        body!.Settings["passwordSet"]!.GetValue<bool>().Should().BeFalse();
     }
 
     [Fact]
-    public async Task PutQBittorrent_InvalidBaseUrl_ReturnsValidationProblemWithCamelCaseKey()
+    public async Task Create_InvalidBaseUrl_ReturnsValidationProblemWithCamelCaseKey()
     {
-        var response = await _client.PutAsJsonAsync("/api/connections/qbittorrent", new QBittorrentConnectionRequest
+        var response = await _client.PostAsJsonAsync("/api/connections", new ConnectionCreateRequest
         {
-            BaseUrl = "not-a-url"
+            ProviderKey = "qbittorrent",
+            Name = "Bad",
+            Settings = new JsonObject { ["baseUrl"] = "not-a-url" },
         });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -126,12 +134,13 @@ public class ConnectionEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task PutSonarr_RequiresApiKeyOnFirstSave()
+    public async Task Create_Sonarr_RequiresApiKeyOnFirstSave()
     {
-        var response = await _client.PutAsJsonAsync("/api/connections/sonarr", new ServarrConnectionRequest
+        var response = await _client.PostAsJsonAsync("/api/connections", new ConnectionCreateRequest
         {
-            BaseUrl = "http://sonarr:8989",
-            ApiKey = null
+            ProviderKey = "sonarr",
+            Name = "Sonarr",
+            Settings = new JsonObject { ["baseUrl"] = "http://sonarr:8989" },
         });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -140,30 +149,28 @@ public class ConnectionEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task PutSonarr_ThenGet_RoundTripsWithApiKeySet()
+    public async Task Create_UnknownProvider_ReturnsValidationProblem()
     {
-        var put = await _client.PutAsJsonAsync("/api/connections/sonarr", new ServarrConnectionRequest
+        var response = await _client.PostAsJsonAsync("/api/connections", new ConnectionCreateRequest
         {
-            BaseUrl = "http://sonarr:8989",
-            ApiKey = "abc123",
-            Enabled = true
+            ProviderKey = "lidarr",
+            Name = "Nope",
+            Settings = new JsonObject(),
         });
-        put.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await _client.GetFromJsonAsync<ServarrConnectionResponse>("/api/connections/sonarr");
-        result!.BaseUrl.Should().Be("http://sonarr:8989");
-        result.ApiKeySet.Should().BeTrue();
-        result.Enabled.Should().BeTrue();
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("errors").TryGetProperty("providerKey", out _).Should().BeTrue();
     }
 
     [Fact]
-    public async Task PutRemoteStorage_OutOfRangePort_ReturnsFieldError()
+    public async Task Create_RemoteStorage_OutOfRangePort_ReturnsFieldError()
     {
-        var response = await _client.PutAsJsonAsync("/api/connections/remote-storage", new RemoteStorageConnectionRequest
+        var response = await _client.PostAsJsonAsync("/api/connections", new ConnectionCreateRequest
         {
-            Host = "seedbox.example.com",
-            User = "jack",
-            Port = 99999
+            ProviderKey = "rclone-sftp",
+            Name = "Seedbox",
+            Settings = new JsonObject { ["host"] = "seedbox.example.com", ["user"] = "jack", ["port"] = 99999 },
         });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -172,42 +179,47 @@ public class ConnectionEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task PutRemoteStorage_ThenGet_RoundTripsNonSecretFields()
+    public async Task Create_DuplicateNamePerProvider_ReturnsValidationProblem()
     {
-        var put = await _client.PutAsJsonAsync("/api/connections/remote-storage", new RemoteStorageConnectionRequest
-        {
-            Host = "seedbox.example.com",
-            Port = 2222,
-            User = "jack",
-            Password = "pw",
-            KeyFile = "/keys/id_ed25519",
-            UseAgent = false,
-            Transfers = 8,
-            Checkers = 16,
-            AdditionalFlags = ["--fast-list"]
-        });
-        put.StatusCode.Should().Be(HttpStatusCode.OK);
+        await CreateAsync(QbitRequest("Main"));
 
-        var result = await _client.GetFromJsonAsync<RemoteStorageConnectionResponse>("/api/connections/remote-storage");
-        result!.Host.Should().Be("seedbox.example.com");
-        result.Port.Should().Be(2222);
-        result.KeyFile.Should().Be("/keys/id_ed25519");
-        result.PasswordSet.Should().BeTrue();
-        result.KeyFilePassphraseSet.Should().BeFalse();
-        result.AdditionalFlags.Should().Equal("--fast-list");
+        var response = await _client.PostAsJsonAsync("/api/connections", QbitRequest("Main"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("errors").TryGetProperty("name", out _).Should().BeTrue();
     }
 
     [Fact]
-    public async Task Overview_AfterSave_ShowsConfigured()
+    public async Task Delete_UnusedConnection_ReturnsNoContent()
     {
-        await _client.PutAsJsonAsync("/api/connections/qbittorrent", new QBittorrentConnectionRequest
+        var created = await CreateAsync(QbitRequest("Main"));
+
+        var response = await _client.DeleteAsync($"/api/connections/{created.Id}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await _client.GetAsync($"/api/connections/{created.Id}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Delete_ConnectionUsedByJob_ReturnsConflictWithDependents()
+    {
+        var seeded = await _factory.SeedDefaultConnectionsAsync();
+        var jobResponse = await _client.PostAsJsonAsync("/api/jobs", new JobRequest
         {
-            BaseUrl = "http://qbt:8080"
+            Name = "tv",
+            MediaServiceConnectionId = seeded.Sonarr,
+            DownloadClientConnectionId = seeded.QBittorrent,
+            RemoteStorageConnectionId = seeded.RemoteStorage,
+            RemotePath = "/downloads",
+            StagingPath = Path.Combine(Path.GetTempPath(), "harrbor-test-staging"),
         });
+        jobResponse.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var overview = await _client.GetFromJsonAsync<List<ConnectionSummaryResponse>>("/api/connections", TestJson.Options);
+        var response = await _client.DeleteAsync($"/api/connections/{seeded.Sonarr}");
 
-        overview!.Single(c => c.Type == "qbittorrent").Configured.Should().BeTrue();
-        overview.Single(c => c.Type == "sonarr").Configured.Should().BeFalse();
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var conflict = await response.Content.ReadFromJsonAsync<ConnectionDeleteConflictResponse>(TestJson.Options);
+        conflict!.DependentJobNames.Should().Contain("tv");
     }
 }

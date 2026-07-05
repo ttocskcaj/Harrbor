@@ -1,8 +1,8 @@
+using Harrbor.Abstractions.Clients;
 using Microsoft.EntityFrameworkCore;
 using Harrbor.Configuration;
 using Harrbor.Data;
 using Harrbor.Data.Entities;
-using Harrbor.Services.Clients;
 
 namespace Harrbor.Services.Orchestration.Phases;
 
@@ -12,23 +12,24 @@ public interface IArchivalPhaseHandler : IPhaseHandler
 
 public class ArchivalPhaseHandler : IArchivalPhaseHandler
 {
-    private readonly IQBittorrentClient _qBittorrentClient;
+    private readonly IConnectionManager _connectionManager;
     private readonly ILogger<ArchivalPhaseHandler> _logger;
 
     public ArchivalPhaseHandler(
-        IQBittorrentClient qBittorrentClient,
+        IConnectionManager connectionManager,
         ILogger<ArchivalPhaseHandler> logger)
     {
-        _qBittorrentClient = qBittorrentClient;
+        _connectionManager = connectionManager;
         _logger = logger;
     }
 
-    public Task ExecuteAsync(JobDefinition job, HarrborDbContext dbContext, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(JobDefinition job, HarrborDbContext dbContext, CancellationToken cancellationToken)
     {
-        return ExecuteAsync(job, dbContext, _qBittorrentClient, cancellationToken);
+        var torrentClient = await _connectionManager.GetTorrentClientAsync(job.DownloadClientConnectionId, cancellationToken);
+        await ExecuteAsync(job, dbContext, torrentClient, cancellationToken);
     }
 
-    public async Task ExecuteAsync(JobDefinition job, HarrborDbContext dbContext, IQBittorrentClient qBittorrentClient, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(JobDefinition job, HarrborDbContext dbContext, ITorrentClient torrentClient, CancellationToken cancellationToken)
     {
         var pendingArchival = await dbContext.TrackedReleases
             .Where(r => r.JobName == job.Name
@@ -45,7 +46,7 @@ public class ArchivalPhaseHandler : IArchivalPhaseHandler
         // Ensure the completed category exists before trying to assign torrents to it
         if (!string.IsNullOrEmpty(job.CompletedCategory))
         {
-            await qBittorrentClient.EnsureCategoryExistsAsync(job.CompletedCategory, cancellationToken);
+            await torrentClient.EnsureCategoryExistsAsync(job.CompletedCategory, cancellationToken);
         }
 
         foreach (var release in pendingArchival)
@@ -54,7 +55,7 @@ public class ArchivalPhaseHandler : IArchivalPhaseHandler
             {
                 if (!string.IsNullOrEmpty(job.CompletedCategory))
                 {
-                    await qBittorrentClient.SetCategoryAsync(
+                    await torrentClient.SetCategoryAsync(
                         release.DownloadId,
                         job.CompletedCategory,
                         cancellationToken);

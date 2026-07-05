@@ -1,3 +1,4 @@
+using Harrbor.Abstractions.RemoteStorage;
 using Microsoft.EntityFrameworkCore;
 using Harrbor.Configuration;
 using Harrbor.Data;
@@ -12,23 +13,24 @@ public interface ITransferPhaseHandler : IPhaseHandler
 
 public class TransferPhaseHandler : ITransferPhaseHandler
 {
-    private readonly IRemoteStorageService _remoteStorageService;
+    private readonly IConnectionManager _connectionManager;
     private readonly ITransferProgressTracker _progressTracker;
     private readonly ILogger<TransferPhaseHandler> _logger;
 
     public TransferPhaseHandler(
-        IRemoteStorageService remoteStorageService,
+        IConnectionManager connectionManager,
         ITransferProgressTracker progressTracker,
         ILogger<TransferPhaseHandler> logger)
     {
-        _remoteStorageService = remoteStorageService;
+        _connectionManager = connectionManager;
         _progressTracker = progressTracker;
         _logger = logger;
     }
 
-    public Task ExecuteAsync(JobDefinition job, HarrborDbContext dbContext, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(JobDefinition job, HarrborDbContext dbContext, CancellationToken cancellationToken)
     {
-        return ExecuteAsync(job, dbContext, _remoteStorageService, cancellationToken);
+        var remoteStorageService = await _connectionManager.GetRemoteStorageAsync(job.RemoteStorageConnectionId, cancellationToken);
+        await ExecuteAsync(job, dbContext, remoteStorageService, cancellationToken);
     }
 
     public async Task ExecuteAsync(JobDefinition job, HarrborDbContext dbContext, IRemoteStorageService remoteStorageService, CancellationToken cancellationToken)

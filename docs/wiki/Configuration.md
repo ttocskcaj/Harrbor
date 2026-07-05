@@ -58,12 +58,13 @@ Deleting a job that still has releases mid-pipeline returns **409 Conflict** wit
 |-------|---------|-------------|
 | `name` | - | Unique job identifier |
 | `enabled` | `true` | Enable/disable this job |
-| `serviceType` | `sonarr` | `sonarr` or `radarr` |
+| `mediaServiceType` | `sonarr` | Which media-service connection type to use (e.g. `sonarr`, `radarr`) |
+| `downloadClientType` | `qbittorrent` | Which download-client connection type to use (e.g. `qbittorrent`) |
 | `pollingIntervalSeconds` | `60` | Time between reconciliation cycles (10–86400) |
 | `remotePath` | - | Base path on seedbox (absolute) |
 | `stagingPath` | - | Local staging directory (absolute, must be writable) |
-| `qbittorrentCategory` | - | Filter torrents by category |
-| `qbittorrentTags` | `[]` | Filter torrents by tags |
+| `category` | - | Download-client category applied to this job's torrents |
+| `tags` | `[]` | Download-client tags applied to this job's torrents |
 | `completedCategory` | `null` | Category for archived torrents |
 | `transferParallelism` | `2` | Max concurrent transfers (1–16) |
 | `maxTransferRetries` | `3` | Retry attempts for failed transfers (0–20) |

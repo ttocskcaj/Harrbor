@@ -1,6 +1,5 @@
 using Harrbor.Api.Connections;
 using Harrbor.Api.Releases;
-using Harrbor.Configuration;
 
 namespace Harrbor.Api.Dashboard;
 
@@ -68,7 +67,7 @@ public class JobSnapshot
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public bool Enabled { get; set; }
-    public ServiceType ServiceType { get; set; }
+    public int MediaServiceConnectionId { get; set; }
     public int ActiveReleaseCount { get; set; }
     public DateTime? LastRunAtUtc { get; set; }
     public DateTime? NextRunAtUtc { get; set; }

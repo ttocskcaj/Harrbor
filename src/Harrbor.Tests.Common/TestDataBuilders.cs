@@ -1,3 +1,4 @@
+using Harrbor.Abstractions.Clients.Models;
 using Harrbor.Configuration;
 using Harrbor.Data.Entities;
 using Harrbor.Services.Clients.Models;
@@ -195,11 +196,13 @@ public class JobDefinitionBuilder
 {
     private string _name = "test-job";
     private TimeSpan _pollingInterval = TimeSpan.FromMinutes(1);
-    private ServiceType _serviceType = ServiceType.Sonarr;
+    private int _mediaServiceConnectionId = 1;
+    private int _downloadClientConnectionId = 2;
+    private int _remoteStorageConnectionId = 3;
     private string _remotePath = "/downloads";
     private string _stagingPath = "/staging";
-    private string _qBittorrentCategory = "sonarr";
-    private List<string> _qBittorrentTags = [];
+    private string _category = "sonarr";
+    private List<string> _tags = [];
     private int _transferParallelism = 2;
     private int _maxTransferRetries = 3;
     private TimeSpan _transferRetryDelay = TimeSpan.FromMinutes(5);
@@ -219,9 +222,21 @@ public class JobDefinitionBuilder
         return this;
     }
 
-    public JobDefinitionBuilder WithServiceType(ServiceType serviceType)
+    public JobDefinitionBuilder WithMediaServiceConnectionId(int connectionId)
     {
-        _serviceType = serviceType;
+        _mediaServiceConnectionId = connectionId;
+        return this;
+    }
+
+    public JobDefinitionBuilder WithDownloadClientConnectionId(int connectionId)
+    {
+        _downloadClientConnectionId = connectionId;
+        return this;
+    }
+
+    public JobDefinitionBuilder WithRemoteStorageConnectionId(int connectionId)
+    {
+        _remoteStorageConnectionId = connectionId;
         return this;
     }
 
@@ -237,15 +252,15 @@ public class JobDefinitionBuilder
         return this;
     }
 
-    public JobDefinitionBuilder WithQBittorrentCategory(string category)
+    public JobDefinitionBuilder WithCategory(string category)
     {
-        _qBittorrentCategory = category;
+        _category = category;
         return this;
     }
 
-    public JobDefinitionBuilder WithQBittorrentTags(List<string> tags)
+    public JobDefinitionBuilder WithTags(List<string> tags)
     {
-        _qBittorrentTags = tags;
+        _tags = tags;
         return this;
     }
 
@@ -291,11 +306,13 @@ public class JobDefinitionBuilder
         {
             Name = _name,
             PollingInterval = _pollingInterval,
-            ServiceType = _serviceType,
+            MediaServiceConnectionId = _mediaServiceConnectionId,
+            DownloadClientConnectionId = _downloadClientConnectionId,
+            RemoteStorageConnectionId = _remoteStorageConnectionId,
             RemotePath = _remotePath,
             StagingPath = _stagingPath,
-            QBittorrentCategory = _qBittorrentCategory,
-            QBittorrentTags = _qBittorrentTags,
+            Category = _category,
+            Tags = _tags,
             TransferParallelism = _transferParallelism,
             MaxTransferRetries = _maxTransferRetries,
             TransferRetryDelay = _transferRetryDelay,

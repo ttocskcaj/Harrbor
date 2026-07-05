@@ -1,29 +1,28 @@
 using FakeItEasy;
 using FluentAssertions;
-using QBittorrent.Client;
+using Harrbor.Abstractions.Clients;
+using Harrbor.Abstractions.Clients.Models;
 using Xunit;
-using IQBittorrentClient = Harrbor.Services.Clients.IQBittorrentClient;
-using ConnectionTestResult = Harrbor.Services.Clients.ConnectionTestResult;
 
 namespace Harrbor.Tests.Unit.Services.Clients;
 
 /// <summary>
-/// Tests for QBittorrent client behavior using the IQBittorrentClient interface.
-/// Note: The actual QBittorrentClientWrapper creates its own internal HTTP client,
-/// so these tests use a faked interface to verify expected behavior patterns.
-/// Integration tests would be needed to test the actual wrapper against a real instance.
+/// Tests for torrent client behavior using the <see cref="ITorrentClient"/> interface.
+/// The concrete <c>QBittorrentTorrentClient</c> creates its own internal HTTP client, so these
+/// tests use a faked interface to verify expected behavior patterns; integration tests exercise
+/// the real client against config/store behavior.
 /// </summary>
-public class QBittorrentClientWrapperTests
+public class TorrentClientTests
 {
     [Fact]
     public async Task GetTorrentListAsync_WithCategory_FiltersCorrectly()
     {
         // Arrange
-        var client = A.Fake<IQBittorrentClient>();
-        var expectedTorrents = new List<TorrentInfo>
+        var client = A.Fake<ITorrentClient>();
+        var expectedTorrents = new List<TorrentSnapshot>
         {
-            CreateTorrentInfo("hash1", "Torrent 1", "sonarr"),
-            CreateTorrentInfo("hash2", "Torrent 2", "sonarr")
+            CreateSnapshot("hash1", "Torrent 1", "sonarr"),
+            CreateSnapshot("hash2", "Torrent 2", "sonarr")
         };
 
         A.CallTo(() => client.GetTorrentListAsync("sonarr", null, A<CancellationToken>._))
@@ -41,11 +40,11 @@ public class QBittorrentClientWrapperTests
     public async Task GetTorrentListAsync_WithMultipleTags_FiltersClientSide()
     {
         // Arrange
-        var client = A.Fake<IQBittorrentClient>();
+        var client = A.Fake<ITorrentClient>();
         var tags = new List<string> { "tag1", "tag2" };
-        var expectedTorrents = new List<TorrentInfo>
+        var expectedTorrents = new List<TorrentSnapshot>
         {
-            CreateTorrentInfoWithTags("hash1", "Torrent 1", new[] { "tag1", "tag2", "tag3" })
+            CreateSnapshotWithTags("hash1", "Torrent 1", ["tag1", "tag2", "tag3"])
         };
 
         A.CallTo(() => client.GetTorrentListAsync(null, tags, A<CancellationToken>._))
@@ -62,7 +61,7 @@ public class QBittorrentClientWrapperTests
     public async Task EnsureCategoryExistsAsync_CallsWithCorrectCategory()
     {
         // Arrange
-        var client = A.Fake<IQBittorrentClient>();
+        var client = A.Fake<ITorrentClient>();
 
         // Act
         await client.EnsureCategoryExistsAsync("new-category");
@@ -76,7 +75,7 @@ public class QBittorrentClientWrapperTests
     public async Task TestConnectionAsync_Success_ReturnsSuccessResult()
     {
         // Arrange
-        var client = A.Fake<IQBittorrentClient>();
+        var client = A.Fake<ITorrentClient>();
         var expectedResult = new ConnectionTestResult(true, Version: "2.8.19");
 
         A.CallTo(() => client.TestConnectionAsync(A<CancellationToken>._))
@@ -95,7 +94,7 @@ public class QBittorrentClientWrapperTests
     public async Task TestConnectionAsync_Failure_ReturnsErrorResult()
     {
         // Arrange
-        var client = A.Fake<IQBittorrentClient>();
+        var client = A.Fake<ITorrentClient>();
         var expectedResult = new ConnectionTestResult(false, Error: "Connection refused");
 
         A.CallTo(() => client.TestConnectionAsync(A<CancellationToken>._))
@@ -113,8 +112,8 @@ public class QBittorrentClientWrapperTests
     public async Task GetTorrentAsync_ReturnsCorrectTorrent()
     {
         // Arrange
-        var client = A.Fake<IQBittorrentClient>();
-        var expectedTorrent = CreateTorrentInfo("abc123", "Test Torrent", "sonarr");
+        var client = A.Fake<ITorrentClient>();
+        var expectedTorrent = CreateSnapshot("abc123", "Test Torrent", "sonarr");
 
         A.CallTo(() => client.GetTorrentAsync("abc123", A<CancellationToken>._))
             .Returns(expectedTorrent);
@@ -131,10 +130,10 @@ public class QBittorrentClientWrapperTests
     public async Task GetTorrentAsync_NotFound_ReturnsNull()
     {
         // Arrange
-        var client = A.Fake<IQBittorrentClient>();
+        var client = A.Fake<ITorrentClient>();
 
         A.CallTo(() => client.GetTorrentAsync("notfound", A<CancellationToken>._))
-            .Returns((TorrentInfo?)null);
+            .Returns((TorrentSnapshot?)null);
 
         // Act
         var result = await client.GetTorrentAsync("notfound");
@@ -147,7 +146,7 @@ public class QBittorrentClientWrapperTests
     public async Task SetCategoryAsync_CallsWithCorrectParameters()
     {
         // Arrange
-        var client = A.Fake<IQBittorrentClient>();
+        var client = A.Fake<ITorrentClient>();
 
         // Act
         await client.SetCategoryAsync("abc123", "completed");
@@ -161,7 +160,7 @@ public class QBittorrentClientWrapperTests
     public async Task IsConnectedAsync_WhenTestSucceeds_ReturnsTrue()
     {
         // Arrange
-        var client = A.Fake<IQBittorrentClient>();
+        var client = A.Fake<ITorrentClient>();
         A.CallTo(() => client.IsConnectedAsync(A<CancellationToken>._)).Returns(true);
 
         // Act
@@ -175,7 +174,7 @@ public class QBittorrentClientWrapperTests
     public async Task IsConnectedAsync_WhenTestFails_ReturnsFalse()
     {
         // Arrange
-        var client = A.Fake<IQBittorrentClient>();
+        var client = A.Fake<ITorrentClient>();
         A.CallTo(() => client.IsConnectedAsync(A<CancellationToken>._)).Returns(false);
 
         // Act
@@ -185,29 +184,9 @@ public class QBittorrentClientWrapperTests
         result.Should().BeFalse();
     }
 
-    private static TorrentInfo CreateTorrentInfo(string hash, string name, string category)
-    {
-        // TorrentInfo is from the QBittorrent.Client library
-        // We need to create it through reflection or use a different approach
-        return new TorrentInfo
-        {
-            Hash = hash,
-            Name = name,
-            Category = category,
-            Progress = 1.0,
-            State = TorrentState.Uploading
-        };
-    }
+    private static TorrentSnapshot CreateSnapshot(string hash, string name, string category) =>
+        new(hash, name, 1.0, ContentPath: null, SavePath: null, Category: category, Tags: []);
 
-    private static TorrentInfo CreateTorrentInfoWithTags(string hash, string name, string[] tags)
-    {
-        return new TorrentInfo
-        {
-            Hash = hash,
-            Name = name,
-            Tags = tags,
-            Progress = 1.0,
-            State = TorrentState.Uploading
-        };
-    }
+    private static TorrentSnapshot CreateSnapshotWithTags(string hash, string name, string[] tags) =>
+        new(hash, name, 1.0, ContentPath: null, SavePath: null, Category: null, Tags: tags);
 }

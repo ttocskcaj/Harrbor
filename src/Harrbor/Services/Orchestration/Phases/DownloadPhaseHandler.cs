@@ -1,8 +1,8 @@
+using Harrbor.Abstractions.Clients;
 using Microsoft.EntityFrameworkCore;
 using Harrbor.Configuration;
 using Harrbor.Data;
 using Harrbor.Data.Entities;
-using Harrbor.Services.Clients;
 
 namespace Harrbor.Services.Orchestration.Phases;
 
@@ -12,23 +12,24 @@ public interface IDownloadPhaseHandler : IPhaseHandler
 
 public class DownloadPhaseHandler : IDownloadPhaseHandler
 {
-    private readonly IQBittorrentClient _qBittorrentClient;
+    private readonly IConnectionManager _connectionManager;
     private readonly ILogger<DownloadPhaseHandler> _logger;
 
     public DownloadPhaseHandler(
-        IQBittorrentClient qBittorrentClient,
+        IConnectionManager connectionManager,
         ILogger<DownloadPhaseHandler> logger)
     {
-        _qBittorrentClient = qBittorrentClient;
+        _connectionManager = connectionManager;
         _logger = logger;
     }
 
-    public Task ExecuteAsync(JobDefinition job, HarrborDbContext dbContext, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(JobDefinition job, HarrborDbContext dbContext, CancellationToken cancellationToken)
     {
-        return ExecuteAsync(job, dbContext, _qBittorrentClient, cancellationToken);
+        var torrentClient = await _connectionManager.GetTorrentClientAsync(job.DownloadClientConnectionId, cancellationToken);
+        await ExecuteAsync(job, dbContext, torrentClient, cancellationToken);
     }
 
-    public async Task ExecuteAsync(JobDefinition job, HarrborDbContext dbContext, IQBittorrentClient qBittorrentClient, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(JobDefinition job, HarrborDbContext dbContext, ITorrentClient torrentClient, CancellationToken cancellationToken)
     {
         var pendingDownloads = await dbContext.TrackedReleases
             .Where(r => r.JobName == job.Name
@@ -43,7 +44,7 @@ public class DownloadPhaseHandler : IDownloadPhaseHandler
 
         foreach (var release in pendingDownloads)
         {
-            var torrent = await qBittorrentClient.GetTorrentAsync(release.DownloadId, cancellationToken);
+            var torrent = await torrentClient.GetTorrentAsync(release.DownloadId, cancellationToken);
 
             if (torrent == null)
             {

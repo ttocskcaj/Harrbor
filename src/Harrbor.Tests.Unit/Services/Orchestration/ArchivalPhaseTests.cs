@@ -1,6 +1,6 @@
 using FakeItEasy;
 using FluentAssertions;
-using Harrbor.Configuration;
+using Harrbor.Abstractions.Clients;
 using Harrbor.Data.Entities;
 using Harrbor.Services.Orchestration.Phases;
 using Harrbor.Tests.Common;
@@ -8,7 +8,7 @@ using Harrbor.Tests.Unit.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Xunit;
-using IQBittorrentClient = Harrbor.Services.Clients.IQBittorrentClient;
+using Harrbor.Services;
 
 namespace Harrbor.Tests.Unit.Services.Orchestration;
 
@@ -18,18 +18,19 @@ namespace Harrbor.Tests.Unit.Services.Orchestration;
 /// </summary>
 public class ArchivalPhaseTests
 {
-    private readonly IQBittorrentClient _qBittorrentClient;
+    private readonly ITorrentClient _torrentClient;
     private readonly ILogger<ArchivalPhaseHandler> _logger;
 
     public ArchivalPhaseTests()
     {
-        _qBittorrentClient = A.Fake<IQBittorrentClient>();
+        _torrentClient = A.Fake<ITorrentClient>();
         _logger = A.Fake<ILogger<ArchivalPhaseHandler>>();
     }
 
+    // The tests drive the client-injecting overload directly, so the manager is never invoked.
     private ArchivalPhaseHandler CreateHandler()
     {
-        return new ArchivalPhaseHandler(_qBittorrentClient, _logger);
+        return new ArchivalPhaseHandler(A.Fake<IConnectionManager>(), _logger);
     }
 
     [Fact]
@@ -54,7 +55,7 @@ public class ArchivalPhaseTests
         var handler = CreateHandler();
 
         // Act
-        await handler.ExecuteAsync(job, dbContext, _qBittorrentClient, CancellationToken.None);
+        await handler.ExecuteAsync(job, dbContext, _torrentClient, CancellationToken.None);
 
         // Assert
         var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
@@ -62,9 +63,9 @@ public class ArchivalPhaseTests
         updatedRelease.ArchivedAtUtc.Should().NotBeNull();
         updatedRelease.Outcome.Should().Be(PipelineOutcome.Completed);
 
-        A.CallTo(() => _qBittorrentClient.EnsureCategoryExistsAsync("completed", A<CancellationToken>._))
+        A.CallTo(() => _torrentClient.EnsureCategoryExistsAsync("completed", A<CancellationToken>._))
             .MustHaveHappenedOnceExactly();
-        A.CallTo(() => _qBittorrentClient.SetCategoryAsync("ABC123", "completed", A<CancellationToken>._))
+        A.CallTo(() => _torrentClient.SetCategoryAsync("ABC123", "completed", A<CancellationToken>._))
             .MustHaveHappenedOnceExactly();
     }
 
@@ -90,13 +91,13 @@ public class ArchivalPhaseTests
         var handler = CreateHandler();
 
         // Act
-        await handler.ExecuteAsync(job, dbContext, _qBittorrentClient, CancellationToken.None);
+        await handler.ExecuteAsync(job, dbContext, _torrentClient, CancellationToken.None);
 
         // Assert
         var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
         updatedRelease.ArchivalStatus.Should().Be(ArchivalStatus.Completed);
 
-        A.CallTo(() => _qBittorrentClient.SetCategoryAsync(A<string>._, A<string>._, A<CancellationToken>._))
+        A.CallTo(() => _torrentClient.SetCategoryAsync(A<string>._, A<string>._, A<CancellationToken>._))
             .MustNotHaveHappened();
     }
 
@@ -114,7 +115,7 @@ public class ArchivalPhaseTests
         dbContext.TrackedReleases.Add(release);
         await dbContext.SaveChangesAsync();
 
-        A.CallTo(() => _qBittorrentClient.SetCategoryAsync("ABC123", "completed", A<CancellationToken>._))
+        A.CallTo(() => _torrentClient.SetCategoryAsync("ABC123", "completed", A<CancellationToken>._))
             .Throws(new Exception("Torrent not found"));
 
         var job = new JobDefinitionBuilder()
@@ -125,7 +126,7 @@ public class ArchivalPhaseTests
         var handler = CreateHandler();
 
         // Act
-        await handler.ExecuteAsync(job, dbContext, _qBittorrentClient, CancellationToken.None);
+        await handler.ExecuteAsync(job, dbContext, _torrentClient, CancellationToken.None);
 
         // Assert
         var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
@@ -160,13 +161,13 @@ public class ArchivalPhaseTests
         var handler = CreateHandler();
 
         // Act
-        await handler.ExecuteAsync(job, dbContext, _qBittorrentClient, CancellationToken.None);
+        await handler.ExecuteAsync(job, dbContext, _torrentClient, CancellationToken.None);
 
         // Assert
         var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
         updatedRelease.ArchivalStatus.Should().Be(ArchivalStatus.Pending);
         updatedRelease.Outcome.Should().Be(PipelineOutcome.Cancelled);
-        A.CallTo(() => _qBittorrentClient.SetCategoryAsync(A<string>._, A<string>._, A<CancellationToken>._))
+        A.CallTo(() => _torrentClient.SetCategoryAsync(A<string>._, A<string>._, A<CancellationToken>._))
             .MustNotHaveHappened();
     }
 
@@ -192,12 +193,12 @@ public class ArchivalPhaseTests
         var handler = CreateHandler();
 
         // Act
-        await handler.ExecuteAsync(job, dbContext, _qBittorrentClient, CancellationToken.None);
+        await handler.ExecuteAsync(job, dbContext, _torrentClient, CancellationToken.None);
 
         // Assert
         var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
         updatedRelease.ArchivalStatus.Should().Be(ArchivalStatus.Pending);
-        A.CallTo(() => _qBittorrentClient.SetCategoryAsync(A<string>._, A<string>._, A<CancellationToken>._))
+        A.CallTo(() => _torrentClient.SetCategoryAsync(A<string>._, A<string>._, A<CancellationToken>._))
             .MustNotHaveHappened();
     }
 
@@ -221,15 +222,15 @@ public class ArchivalPhaseTests
             .Build();
 
         var callOrder = new List<string>();
-        A.CallTo(() => _qBittorrentClient.EnsureCategoryExistsAsync(A<string>._, A<CancellationToken>._))
+        A.CallTo(() => _torrentClient.EnsureCategoryExistsAsync(A<string>._, A<CancellationToken>._))
             .Invokes(() => callOrder.Add("ensure"));
-        A.CallTo(() => _qBittorrentClient.SetCategoryAsync(A<string>._, A<string>._, A<CancellationToken>._))
+        A.CallTo(() => _torrentClient.SetCategoryAsync(A<string>._, A<string>._, A<CancellationToken>._))
             .Invokes(() => callOrder.Add("set"));
 
         var handler = CreateHandler();
 
         // Act
-        await handler.ExecuteAsync(job, dbContext, _qBittorrentClient, CancellationToken.None);
+        await handler.ExecuteAsync(job, dbContext, _torrentClient, CancellationToken.None);
 
         // Assert
         callOrder.Should().Equal(["ensure", "set"]);
@@ -263,12 +264,12 @@ public class ArchivalPhaseTests
         var handler = CreateHandler();
 
         // Act
-        await handler.ExecuteAsync(job, dbContext, _qBittorrentClient, CancellationToken.None);
+        await handler.ExecuteAsync(job, dbContext, _torrentClient, CancellationToken.None);
 
         // Assert
-        A.CallTo(() => _qBittorrentClient.SetCategoryAsync("PENDING1", "completed", A<CancellationToken>._))
+        A.CallTo(() => _torrentClient.SetCategoryAsync("PENDING1", "completed", A<CancellationToken>._))
             .MustHaveHappenedOnceExactly();
-        A.CallTo(() => _qBittorrentClient.SetCategoryAsync("COMPLETED1", A<string>._, A<CancellationToken>._))
+        A.CallTo(() => _torrentClient.SetCategoryAsync("COMPLETED1", A<string>._, A<CancellationToken>._))
             .MustNotHaveHappened();
     }
 
@@ -294,15 +295,15 @@ public class ArchivalPhaseTests
         var handler = CreateHandler();
 
         // Act
-        await handler.ExecuteAsync(job, dbContext, _qBittorrentClient, CancellationToken.None);
+        await handler.ExecuteAsync(job, dbContext, _torrentClient, CancellationToken.None);
 
         // Assert
         var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
         updatedRelease.ArchivalStatus.Should().Be(ArchivalStatus.Completed);
 
-        A.CallTo(() => _qBittorrentClient.EnsureCategoryExistsAsync(A<string>._, A<CancellationToken>._))
+        A.CallTo(() => _torrentClient.EnsureCategoryExistsAsync(A<string>._, A<CancellationToken>._))
             .MustNotHaveHappened();
-        A.CallTo(() => _qBittorrentClient.SetCategoryAsync(A<string>._, A<string>._, A<CancellationToken>._))
+        A.CallTo(() => _torrentClient.SetCategoryAsync(A<string>._, A<string>._, A<CancellationToken>._))
             .MustNotHaveHappened();
     }
 
@@ -330,13 +331,13 @@ public class ArchivalPhaseTests
         var handler = CreateHandler();
 
         // Act
-        await handler.ExecuteAsync(job, dbContext, _qBittorrentClient, CancellationToken.None);
+        await handler.ExecuteAsync(job, dbContext, _torrentClient, CancellationToken.None);
 
         // Assert
         var updatedReleases = await dbContext.TrackedReleases.ToListAsync();
         updatedReleases.Should().AllSatisfy(r => r.ArchivalStatus.Should().Be(ArchivalStatus.Completed));
 
-        A.CallTo(() => _qBittorrentClient.SetCategoryAsync(A<string>._, "completed", A<CancellationToken>._))
+        A.CallTo(() => _torrentClient.SetCategoryAsync(A<string>._, "completed", A<CancellationToken>._))
             .MustHaveHappened(5, Times.Exactly);
     }
 }

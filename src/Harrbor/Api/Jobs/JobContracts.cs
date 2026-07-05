@@ -1,17 +1,17 @@
-using Harrbor.Configuration;
-
 namespace Harrbor.Api.Jobs;
 
 public class JobRequest
 {
     public string Name { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
-    public ServiceType ServiceType { get; set; } = ServiceType.Sonarr;
+    public int MediaServiceConnectionId { get; set; }
+    public int DownloadClientConnectionId { get; set; }
+    public int RemoteStorageConnectionId { get; set; }
     public int PollingIntervalSeconds { get; set; } = 60;
     public string RemotePath { get; set; } = string.Empty;
     public string StagingPath { get; set; } = string.Empty;
-    public string QBittorrentCategory { get; set; } = string.Empty;
-    public List<string> QBittorrentTags { get; set; } = [];
+    public string Category { get; set; } = string.Empty;
+    public List<string> Tags { get; set; } = [];
     public int TransferParallelism { get; set; } = 2;
     public int MaxTransferRetries { get; set; } = 3;
     public int TransferRetryDelaySeconds { get; set; } = 300;
@@ -24,12 +24,14 @@ public class JobResponse
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public bool Enabled { get; set; }
-    public ServiceType ServiceType { get; set; }
+    public int MediaServiceConnectionId { get; set; }
+    public int DownloadClientConnectionId { get; set; }
+    public int RemoteStorageConnectionId { get; set; }
     public int PollingIntervalSeconds { get; set; }
     public string RemotePath { get; set; } = string.Empty;
     public string StagingPath { get; set; } = string.Empty;
-    public string QBittorrentCategory { get; set; } = string.Empty;
-    public List<string> QBittorrentTags { get; set; } = [];
+    public string Category { get; set; } = string.Empty;
+    public List<string> Tags { get; set; } = [];
     public int TransferParallelism { get; set; }
     public int MaxTransferRetries { get; set; }
     public int TransferRetryDelaySeconds { get; set; }

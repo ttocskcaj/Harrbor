@@ -1,12 +1,12 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using FakeItEasy;
 using FluentAssertions;
+using Harrbor.Abstractions.Clients;
 using Harrbor.Api.Connections;
-using Harrbor.Configuration.Connections;
-using Harrbor.Services.Clients;
-using Harrbor.Services.RemoteStorage;
+using Harrbor.Tests.Common;
 using Harrbor.Tests.Integration.Helpers;
 using Xunit;
 
@@ -29,58 +29,47 @@ public class ConnectionTestEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task TestQBittorrent_MergesStoredSecretIntoPayload()
+    public async Task TestUnsaved_ValidQBittorrentPayload_ReturnsSuccess()
     {
-        await _client.PutAsJsonAsync("/api/connections/qbittorrent", new QBittorrentConnectionRequest
-        {
-            BaseUrl = "http://qbt:8080",
-            Username = "admin",
-            Password = "stored-pw"
-        });
-
-        QBittorrentSettings? received = null;
-        A.CallTo(() => _factory.QBittorrentClient.TestConnectionAsync(A<QBittorrentSettings>._, A<CancellationToken>._))
-            .Invokes((QBittorrentSettings s, CancellationToken _) => received = s)
+        A.CallTo(() => _factory.QBittorrentClient.TestConnectionAsync(A<CancellationToken>._))
             .Returns(new ConnectionTestResult(true, Version: "2.9.3"));
 
-        // Payload omits the password — the stored secret must be used for the test
-        var response = await _client.PostAsJsonAsync("/api/connections/qbittorrent/test", new QBittorrentConnectionRequest
+        var response = await _client.PostAsJsonAsync("/api/connections/test", new ConnectionTestRequest
         {
-            BaseUrl = "http://qbt:8080",
-            Username = "admin"
+            ProviderKey = "qbittorrent",
+            Settings = new JsonObject { ["baseUrl"] = "http://qbt:8080", ["username"] = "admin", ["password"] = "pw" },
         });
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var body = await response.Content.ReadFromJsonAsync<ConnectionTestResponse>();
+        var body = await response.Content.ReadFromJsonAsync<ConnectionTestResponse>(TestJson.Options);
         body!.Success.Should().BeTrue();
-
-        received.Should().NotBeNull();
-        received!.Password.Should().Be("stored-pw");
     }
 
     [Fact]
-    public async Task TestQBittorrent_ReachabilityFailure_IsSuccessFalseNot4xx()
+    public async Task TestUnsaved_ReachabilityFailure_IsSuccessFalseNot4xx()
     {
-        A.CallTo(() => _factory.QBittorrentClient.TestConnectionAsync(A<QBittorrentSettings>._, A<CancellationToken>._))
+        A.CallTo(() => _factory.QBittorrentClient.TestConnectionAsync(A<CancellationToken>._))
             .Returns(new ConnectionTestResult(false, Error: "Cannot reach http://qbt:8080"));
 
-        var response = await _client.PostAsJsonAsync("/api/connections/qbittorrent/test", new QBittorrentConnectionRequest
+        var response = await _client.PostAsJsonAsync("/api/connections/test", new ConnectionTestRequest
         {
-            BaseUrl = "http://qbt:8080"
+            ProviderKey = "qbittorrent",
+            Settings = new JsonObject { ["baseUrl"] = "http://qbt:8080" },
         });
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var body = await response.Content.ReadFromJsonAsync<ConnectionTestResponse>();
+        var body = await response.Content.ReadFromJsonAsync<ConnectionTestResponse>(TestJson.Options);
         body!.Success.Should().BeFalse();
         body.Error.Should().Contain("Cannot reach");
     }
 
     [Fact]
-    public async Task TestQBittorrent_InvalidPayload_Returns400()
+    public async Task TestUnsaved_InvalidPayload_Returns400()
     {
-        var response = await _client.PostAsJsonAsync("/api/connections/qbittorrent/test", new QBittorrentConnectionRequest
+        var response = await _client.PostAsJsonAsync("/api/connections/test", new ConnectionTestRequest
         {
-            BaseUrl = "not-a-url"
+            ProviderKey = "qbittorrent",
+            Settings = new JsonObject { ["baseUrl"] = "not-a-url" },
         });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -89,38 +78,12 @@ public class ConnectionTestEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task TestSonarr_UsesStoredApiKey_WhenPayloadOmitsIt()
+    public async Task TestUnsaved_Sonarr_MissingApiKey_Returns400()
     {
-        await _client.PutAsJsonAsync("/api/connections/sonarr", new ServarrConnectionRequest
+        var response = await _client.PostAsJsonAsync("/api/connections/test", new ConnectionTestRequest
         {
-            BaseUrl = "http://sonarr:8989",
-            ApiKey = "stored-key"
-        });
-
-        A.CallTo(() => _factory.SonarrClient.TestConnectionAsync("http://sonarr:8989", "stored-key", A<CancellationToken>._))
-            .Returns(new ConnectionTestResult(true, Version: "4.0.0"));
-
-        var response = await _client.PostAsJsonAsync("/api/connections/sonarr/test", new ServarrConnectionRequest
-        {
-            BaseUrl = "http://sonarr:8989",
-            ApiKey = null
-        });
-
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var body = await response.Content.ReadFromJsonAsync<ConnectionTestResponse>();
-        body!.Success.Should().BeTrue();
-
-        A.CallTo(() => _factory.SonarrClient.TestConnectionAsync("http://sonarr:8989", "stored-key", A<CancellationToken>._))
-            .MustHaveHappenedOnceExactly();
-    }
-
-    [Fact]
-    public async Task TestSonarr_NoStoredOrPayloadKey_Returns400()
-    {
-        var response = await _client.PostAsJsonAsync("/api/connections/sonarr/test", new ServarrConnectionRequest
-        {
-            BaseUrl = "http://sonarr:8989",
-            ApiKey = null
+            ProviderKey = "sonarr",
+            Settings = new JsonObject { ["baseUrl"] = "http://sonarr:8989" },
         });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -129,21 +92,37 @@ public class ConnectionTestEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task TestRemoteStorage_ReturnsClientError()
+    public async Task TestUnsaved_UnknownProvider_Returns400()
     {
-        A.CallTo(() => _factory.RemoteStorageService.TestConnectionAsync(A<RemoteStorageSettings>._, A<CancellationToken>._))
-            .Returns(new RemoteStorageConnectionResult(false, "ssh: handshake failed"));
-
-        var response = await _client.PostAsJsonAsync("/api/connections/remote-storage/test", new RemoteStorageConnectionRequest
+        var response = await _client.PostAsJsonAsync("/api/connections/test", new ConnectionTestRequest
         {
-            Host = "seedbox.example.com",
-            User = "jack",
-            Password = "wrong"
+            ProviderKey = "lidarr",
+            Settings = new JsonObject(),
         });
 
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task TestExisting_UsesStoredSecret_WhenPayloadOmitsIt()
+    {
+        A.CallTo(() => _factory.SonarrClient.TestConnectionAsync(A<CancellationToken>._))
+            .Returns(new ConnectionTestResult(true, Version: "4.0.0"));
+
+        // Save a Sonarr connection with an API key.
+        var created = await (await _client.PostAsJsonAsync("/api/connections", new ConnectionCreateRequest
+        {
+            ProviderKey = "sonarr",
+            Name = "Sonarr",
+            Settings = new JsonObject { ["baseUrl"] = "http://sonarr:8989", ["apiKey"] = "stored-key" },
+        })).Content.ReadFromJsonAsync<ConnectionResponse>(TestJson.Options);
+
+        // Test payload omits the apiKey — validation only passes if the stored secret is merged in.
+        var response = await _client.PostAsJsonAsync($"/api/connections/{created!.Id}/test",
+            new JsonObject { ["baseUrl"] = "http://sonarr:8989" });
+
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var body = await response.Content.ReadFromJsonAsync<ConnectionTestResponse>();
-        body!.Success.Should().BeFalse();
-        body.Error.Should().Contain("handshake failed");
+        var body = await response.Content.ReadFromJsonAsync<ConnectionTestResponse>(TestJson.Options);
+        body!.Success.Should().BeTrue();
     }
 }

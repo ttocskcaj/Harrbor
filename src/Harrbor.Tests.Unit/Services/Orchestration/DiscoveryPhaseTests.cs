@@ -1,10 +1,9 @@
 using FakeItEasy;
 using FluentAssertions;
-using Harrbor.Configuration;
+using Harrbor.Abstractions.Clients;
+using Harrbor.Abstractions.Clients.Models;
 using Harrbor.Data.Entities;
 using Harrbor.Services;
-using Harrbor.Services.Clients;
-using Harrbor.Services.Clients.Models;
 using Harrbor.Services.Orchestration.Phases;
 using Harrbor.Tests.Common;
 using Harrbor.Tests.Unit.Helpers;
@@ -20,23 +19,19 @@ namespace Harrbor.Tests.Unit.Services.Orchestration;
 /// </summary>
 public class DiscoveryPhaseTests
 {
-    private readonly IMediaServiceResolver _mediaServiceResolver;
     private readonly IMediaService _mediaService;
     private readonly ILogger<DiscoveryPhaseHandler> _logger;
 
     public DiscoveryPhaseTests()
     {
         _mediaService = A.Fake<IMediaService>();
-        _mediaServiceResolver = A.Fake<IMediaServiceResolver>();
         _logger = A.Fake<ILogger<DiscoveryPhaseHandler>>();
-
-        A.CallTo(() => _mediaServiceResolver.GetServiceForJob(A<JobDefinition>._))
-            .Returns(_mediaService);
     }
 
+    // The tests drive the client-injecting overload directly, so the manager is never invoked.
     private DiscoveryPhaseHandler CreateHandler()
     {
-        return new DiscoveryPhaseHandler(_mediaServiceResolver, _logger);
+        return new DiscoveryPhaseHandler(A.Fake<IConnectionManager>(), _logger);
     }
 
     [Fact]

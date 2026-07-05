@@ -1,8 +1,8 @@
+using Harrbor.Abstractions.Clients;
 using Microsoft.EntityFrameworkCore;
 using Harrbor.Configuration;
 using Harrbor.Data;
 using Harrbor.Data.Entities;
-using Harrbor.Services.Clients;
 
 namespace Harrbor.Services.Orchestration.Phases;
 
@@ -12,20 +12,20 @@ public interface IImportPhaseHandler : IPhaseHandler
 
 public class ImportPhaseHandler : IImportPhaseHandler
 {
-    private readonly IMediaServiceResolver _mediaServiceResolver;
+    private readonly IConnectionManager _connectionManager;
     private readonly ILogger<ImportPhaseHandler> _logger;
 
     public ImportPhaseHandler(
-        IMediaServiceResolver mediaServiceResolver,
+        IConnectionManager connectionManager,
         ILogger<ImportPhaseHandler> logger)
     {
-        _mediaServiceResolver = mediaServiceResolver;
+        _connectionManager = connectionManager;
         _logger = logger;
     }
 
     public async Task ExecuteAsync(JobDefinition job, HarrborDbContext dbContext, CancellationToken cancellationToken)
     {
-        var mediaService = _mediaServiceResolver.GetServiceForJob(job);
+        var mediaService = await _connectionManager.GetMediaServiceAsync(job.MediaServiceConnectionId, cancellationToken);
         await ExecuteAsync(job, dbContext, mediaService, cancellationToken);
     }
 

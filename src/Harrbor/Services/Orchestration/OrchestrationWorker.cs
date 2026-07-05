@@ -1,6 +1,6 @@
 using Harrbor.Configuration;
-using Harrbor.Configuration.Connections;
 using Harrbor.Data;
+using Harrbor.Data.Entities;
 using Harrbor.Services.Configuration;
 using Microsoft.EntityFrameworkCore;
 
@@ -99,7 +99,7 @@ public class OrchestrationWorker : BackgroundService
             if (!isDue)
                 continue;
 
-            if (!await RequiredConnectionsConfiguredAsync(job.ServiceType, cancellationToken))
+            if (!await RequiredConnectionsConfiguredAsync(job, cancellationToken))
             {
                 // LastRunAtUtc stays untouched: the job never ran, and it should
                 // start immediately once its connections are configured. The
@@ -109,8 +109,9 @@ public class OrchestrationWorker : BackgroundService
                 {
                     _lastUnconfiguredWarnings[job.Id] = now;
                     _logger.LogWarning(
-                        "Job '{JobName}' is due but its required connections are not configured (or its {ServiceType} connection is disabled); skipping",
-                        job.Name, job.ServiceType);
+                        "Job '{JobName}' is due but one or more of its connections is missing or disabled " +
+                        "(media service #{MediaServiceConnectionId}, download client #{DownloadClientConnectionId}, remote storage #{RemoteStorageConnectionId}); skipping",
+                        job.Name, job.MediaServiceConnectionId, job.DownloadClientConnectionId, job.RemoteStorageConnectionId);
                 }
                 continue;
             }
@@ -168,21 +169,19 @@ public class OrchestrationWorker : BackgroundService
         }
     }
 
-    private async Task<bool> RequiredConnectionsConfiguredAsync(ServiceType serviceType, CancellationToken cancellationToken)
+    /// <summary>
+    /// A job can run only when each of its three connections (media service, download client, remote
+    /// storage) exists and is enabled. Read straight from the store by id, no DI scope needed. The
+    /// category of each connection is validated at job-creation time.
+    /// </summary>
+    private async Task<bool> RequiredConnectionsConfiguredAsync(Job job, CancellationToken cancellationToken)
+        => await IsReadyAsync(job.MediaServiceConnectionId, cancellationToken)
+           && await IsReadyAsync(job.DownloadClientConnectionId, cancellationToken)
+           && await IsReadyAsync(job.RemoteStorageConnectionId, cancellationToken);
+
+    private async Task<bool> IsReadyAsync(int connectionId, CancellationToken cancellationToken)
     {
-        if (!await _connectionStore.IsConfiguredAsync(ConnectionTypes.QBittorrent, cancellationToken))
-            return false;
-
-        if (!await _connectionStore.IsConfiguredAsync(ConnectionTypes.RemoteStorage, cancellationToken))
-            return false;
-
-        if (serviceType == ServiceType.Sonarr)
-        {
-            var sonarr = await _connectionStore.GetAsync<SonarrSettings>(cancellationToken);
-            return sonarr is not null && sonarr.Settings.Enabled;
-        }
-
-        var radarr = await _connectionStore.GetAsync<RadarrSettings>(cancellationToken);
-        return radarr is not null && radarr.Settings.Enabled;
+        var connection = await _connectionStore.GetByIdAsync(connectionId, cancellationToken);
+        return connection is { Enabled: true };
     }
 }

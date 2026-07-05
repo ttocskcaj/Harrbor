@@ -17,11 +17,55 @@ namespace Harrbor.Data.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.9");
 
+            modelBuilder.Entity("Harrbor.Data.Entities.Connection", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProviderKey")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SettingsJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProviderKey");
+
+                    b.HasIndex("ProviderKey", "Name")
+                        .IsUnique();
+
+                    b.ToTable("Connections");
+                });
+
             modelBuilder.Entity("Harrbor.Data.Entities.Job", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("CompletedCategory")
                         .HasMaxLength(100)
@@ -29,6 +73,9 @@ namespace Harrbor.Data.Migrations
 
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("TEXT");
+
+                    b.Property<int>("DownloadClientConnectionId")
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("Enabled")
                         .HasColumnType("INTEGER");
@@ -42,6 +89,9 @@ namespace Harrbor.Data.Migrations
                     b.Property<int>("MaxTransferRetries")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("MediaServiceConnectionId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -50,26 +100,21 @@ namespace Harrbor.Data.Migrations
                     b.Property<TimeSpan>("PollingInterval")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("QBittorrentCategory")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("TEXT");
-
-                    b.PrimitiveCollection<string>("QBittorrentTags")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("RemotePath")
                         .IsRequired()
                         .HasMaxLength(1000)
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("ServiceType")
+                    b.Property<int>("RemoteStorageConnectionId")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("StagingPath")
                         .IsRequired()
                         .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.PrimitiveCollection<string>("Tags")
+                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<int>("TransferParallelism")
@@ -83,39 +128,16 @@ namespace Harrbor.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("DownloadClientConnectionId");
+
+                    b.HasIndex("MediaServiceConnectionId");
+
                     b.HasIndex("Name")
                         .IsUnique();
 
+                    b.HasIndex("RemoteStorageConnectionId");
+
                     b.ToTable("Jobs");
-                });
-
-            modelBuilder.Entity("Harrbor.Data.Entities.ServiceConnection", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("SettingsJson")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("Version")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Type")
-                        .IsUnique();
-
-                    b.ToTable("ServiceConnections");
                 });
 
             modelBuilder.Entity("Harrbor.Data.Entities.TrackedRelease", b =>
@@ -214,6 +236,27 @@ namespace Harrbor.Data.Migrations
                     b.HasIndex("TransferStatus");
 
                     b.ToTable("TrackedReleases");
+                });
+
+            modelBuilder.Entity("Harrbor.Data.Entities.Job", b =>
+                {
+                    b.HasOne("Harrbor.Data.Entities.Connection", null)
+                        .WithMany()
+                        .HasForeignKey("DownloadClientConnectionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Harrbor.Data.Entities.Connection", null)
+                        .WithMany()
+                        .HasForeignKey("MediaServiceConnectionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Harrbor.Data.Entities.Connection", null)
+                        .WithMany()
+                        .HasForeignKey("RemoteStorageConnectionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }

@@ -1,6 +1,6 @@
-using Harrbor.Services.Clients.Models;
+using Harrbor.Abstractions.Clients.Models;
 
-namespace Harrbor.Services.Clients;
+namespace Harrbor.Abstractions.Clients;
 
 /// <summary>
 /// Common interface for media management services (Sonarr, Radarr).
@@ -33,7 +33,7 @@ public interface IMediaService
     Task<bool> IsHealthyAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Tests connectivity using an explicit (possibly not-yet-saved) base URL and API key.
+    /// Tests connectivity using the client's own configured settings.
     /// </summary>
-    Task<ConnectionTestResult> TestConnectionAsync(string baseUrl, string apiKey, CancellationToken cancellationToken = default);
+    Task<ConnectionTestResult> TestConnectionAsync(CancellationToken cancellationToken = default);
 }

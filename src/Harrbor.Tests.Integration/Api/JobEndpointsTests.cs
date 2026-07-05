@@ -3,7 +3,6 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
 using Harrbor.Api.Jobs;
-using Harrbor.Configuration;
 using Harrbor.Data.Entities;
 using Harrbor.Tests.Common;
 using Harrbor.Tests.Integration.Helpers;
@@ -17,11 +16,13 @@ public class JobEndpointsTests : IDisposable
     private readonly HarrborWebApplicationFactory _factory = new();
     private readonly HttpClient _client;
     private readonly string _stagingRoot;
+    private readonly HarrborWebApplicationFactory.SeededConnections _connections;
 
     public JobEndpointsTests()
     {
         _client = _factory.CreateClient();
         _stagingRoot = Path.Combine(Path.GetTempPath(), "harrbor-tests", Guid.NewGuid().ToString("N"));
+        _connections = _factory.SeedDefaultConnectionsAsync().GetAwaiter().GetResult();
     }
 
     public void Dispose()
@@ -36,11 +37,13 @@ public class JobEndpointsTests : IDisposable
     {
         Name = name,
         Enabled = true,
-        ServiceType = ServiceType.Sonarr,
+        MediaServiceConnectionId = _connections.Sonarr,
+        DownloadClientConnectionId = _connections.QBittorrent,
+        RemoteStorageConnectionId = _connections.RemoteStorage,
         PollingIntervalSeconds = 60,
         RemotePath = "/remote/downloads/tv",
         StagingPath = Path.Combine(_stagingRoot, name),
-        QBittorrentCategory = "tv",
+        Category = "tv",
         TransferParallelism = 2,
         MaxTransferRetries = 3,
         TransferRetryDelaySeconds = 300,
@@ -291,13 +294,39 @@ public class JobEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task ServiceType_SerializesAsCamelCaseString()
+    public async Task MediaServiceConnectionId_SerializesAsInt()
     {
         await _client.PostAsJsonAsync("/api/jobs", ValidRequest(), TestJson.Options);
 
         var raw = await _client.GetStringAsync("/api/jobs");
 
-        raw.Should().Contain("\"serviceType\":\"sonarr\"");
+        raw.Should().Contain($"\"mediaServiceConnectionId\":{_connections.Sonarr}");
+    }
+
+    [Fact]
+    public async Task PostJob_UnknownConnectionId_ReturnsFieldError()
+    {
+        var request = ValidRequest();
+        request.MediaServiceConnectionId = 9999;
+
+        var response = await _client.PostAsJsonAsync("/api/jobs", request, TestJson.Options);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("errors").TryGetProperty("mediaServiceConnectionId", out _).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task PostJob_WrongCategoryConnection_ReturnsFieldError()
+    {
+        var request = ValidRequest();
+        request.MediaServiceConnectionId = _connections.QBittorrent; // a download client, not a media service
+
+        var response = await _client.PostAsJsonAsync("/api/jobs", request, TestJson.Options);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("errors").TryGetProperty("mediaServiceConnectionId", out _).Should().BeTrue();
     }
 
     [Fact]
@@ -313,7 +342,7 @@ public class JobEndpointsTests : IDisposable
         clone!.Name.Should().Be("tv-shows-copy");
         clone.Enabled.Should().BeFalse();
         clone.Id.Should().NotBe(created.Id);
-        clone.QBittorrentCategory.Should().Be(created.QBittorrentCategory);
+        clone.Category.Should().Be(created.Category);
         clone.StagingPath.Should().Be(created.StagingPath);
         clone.LastRunAtUtc.Should().BeNull();
     }

@@ -3,6 +3,7 @@ using Harrbor.Api.Jobs;
 using Harrbor.Api.Releases;
 using Harrbor.Data;
 using Harrbor.Data.Entities;
+using Harrbor.Services;
 using Harrbor.Services.Configuration;
 using Harrbor.Services.Health;
 using Harrbor.Services.RemoteStorage;
@@ -24,6 +25,7 @@ public static class DashboardEndpoints
     private static async Task<IResult> GetDashboardAsync(
         HarrborDbContext db,
         IConnectionStore store,
+        IConnectionProviderRegistry registry,
         IConnectionHealthMonitor healthMonitor,
         ITransferProgressTracker progressTracker,
         CancellationToken cancellationToken)
@@ -45,7 +47,7 @@ public static class DashboardEndpoints
             Throughput = await BuildThroughputAsync(db, active, progressTracker, now, cancellationToken),
             Jobs = BuildJobSnapshots(jobs, active, now),
             Attention = await BuildAttentionAsync(db, active, jobsByName, now, cancellationToken),
-            Connections = await ConnectionHealthReporting.BuildAsync(store, healthMonitor, cancellationToken)
+            Connections = await ConnectionHealthReporting.BuildAsync(store, registry, healthMonitor, cancellationToken)
         };
 
         return Results.Ok(response);
@@ -128,7 +130,7 @@ public static class DashboardEndpoints
             Id = job.Id,
             Name = job.Name,
             Enabled = job.Enabled,
-            ServiceType = job.ServiceType,
+            MediaServiceConnectionId = job.MediaServiceConnectionId,
             ActiveReleaseCount = activeByJob.GetValueOrDefault(job.Name),
             LastRunAtUtc = job.LastRunAtUtc,
             NextRunAtUtc = JobMapping.ComputeNextRunAtUtc(job, now)

@@ -3,16 +3,6 @@ using System.Text.Json.Serialization;
 namespace Harrbor.Services.Clients.Models;
 
 /// <summary>
-/// Simplified queue item for internal use.
-/// </summary>
-public record QueueItem(
-    string DownloadId,
-    string Title,
-    string Status,
-    string? TrackedDownloadState,
-    string? OutputPath);
-
-/// <summary>
 /// Response from /api/v3/queue endpoint (Sonarr/Radarr).
 /// </summary>
 public class QueueResponse

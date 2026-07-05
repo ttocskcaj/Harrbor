@@ -1,4 +1,5 @@
 <Solution>
+    <Project Path="src/Harrbor.Abstractions/Harrbor.Abstractions.csproj" />
     <Project Path="src/Harrbor/Harrbor.csproj" />
     <Project Path="src/Harrbor.Tests.Common/Harrbor.Tests.Common.csproj" />
     <Project Path="src/Harrbor.Tests.Unit/Harrbor.Tests.Unit.csproj" />

@@ -54,10 +54,12 @@ pnpm build            # type-check (tsc -b) + production build to ui/dist
 
 ### Key Abstractions
 
-- **IMediaService** (`ISonarrClient`, `IRadarrClient`) - Abstraction over Sonarr/Radarr APIs for queue queries and import confirmation
-- **IRemoteStorageService** - rclone-based SFTP transfers from seedbox
-- **IQBittorrentClient** - Wrapper around qBittorrent API for torrent state queries and category management
-- **MediaServiceResolver** - Resolves the correct media service based on job's `ServiceType`
+Connections are organized into **categories** (`ConnectionCategory`: `MediaService`, `DownloadClient`, `RemoteStorage`), each with one client interface. Within a category, concrete **types** (sonarr, radarr, qbittorrent, ...) are declared once in the **`ConnectionCatalog`** (built by `ConnectionCatalogFactory.CreateDefault()`), which is the single source of truth driving DI registration, health probing, the `/api/connections` overview, and job→client resolution. Adding a new type (e.g. Lidarr, Transmission) is one catalog entry plus its settings/client class.
+
+- **IMediaService** - Category abstraction over Servarr APIs (Sonarr/Radarr) for queue queries and import confirmation. `MediaServiceClientBase` implements the shared v3 logic; `SonarrClient`/`RadarrClient` are thin subclasses. Registered keyed by type; resolved per job via **`MediaServiceResolver`** off `job.MediaServiceType`.
+- **ITorrentClient** - Category abstraction over torrent download clients (qBittorrent today via `QBittorrentTorrentClient`), returning the Harrbor-owned `TorrentSnapshot` DTO rather than vendor types. Registered keyed by type; resolved per job via **`TorrentClientResolver`** off `job.DownloadClientType`.
+- **IRemoteStorageService** - rclone-based SFTP transfers from seedbox (one storage type, not yet job-selectable).
+- **ConnectionCatalog / ConnectionDescriptor** - The registry that makes the above data-driven; consumers iterate `catalog.Descriptors` / resolve keyed clients by type key rather than switching on a hard-coded enum.
 
 ### Data Model
 

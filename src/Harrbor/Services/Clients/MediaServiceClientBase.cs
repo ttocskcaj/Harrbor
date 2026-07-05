@@ -1,6 +1,7 @@
 using System.Net;
-using System.Net.Http.Json;
 using System.Text.Json;
+using Harrbor.Abstractions.Clients;
+using Harrbor.Abstractions.Clients.Models;
 using Harrbor.Services.Clients.Models;
 
 namespace Harrbor.Services.Clients;
@@ -13,24 +14,21 @@ public sealed record MediaServiceSettings(string BaseUrl, string ApiKey);
 public abstract class MediaServiceClientBase : IMediaService
 {
     private readonly HttpClient _httpClient;
+    private readonly MediaServiceSettings _settings;
     private readonly ILogger _logger;
     private readonly string _serviceName;
 
     protected MediaServiceClientBase(
         HttpClient httpClient,
+        MediaServiceSettings settings,
         ILogger logger,
         string serviceName)
     {
         _httpClient = httpClient;
+        _settings = settings;
         _logger = logger;
         _serviceName = serviceName;
     }
-
-    /// <summary>
-    /// Fetches the current connection settings, or null when the service is not
-    /// configured. Called per request so config changes apply on next use.
-    /// </summary>
-    protected abstract Task<MediaServiceSettings?> GetSettingsAsync(CancellationToken cancellationToken);
 
     protected abstract string GetQueueQueryParameters();
 
@@ -43,11 +41,8 @@ public abstract class MediaServiceClientBase : IMediaService
         HttpContent? content,
         CancellationToken cancellationToken)
     {
-        var settings = await GetSettingsAsync(cancellationToken)
-            ?? throw new ServiceNotConfiguredException(_serviceName);
-
-        using var request = new HttpRequestMessage(method, BuildUri(settings.BaseUrl, relativePath));
-        request.Headers.Add("X-Api-Key", settings.ApiKey);
+        using var request = new HttpRequestMessage(method, BuildUri(_settings.BaseUrl, relativePath));
+        request.Headers.Add("X-Api-Key", _settings.ApiKey);
         if (content is not null)
             request.Content = content;
 
@@ -73,16 +68,14 @@ public abstract class MediaServiceClientBase : IMediaService
         }
     }
 
-    public async Task<ConnectionTestResult> TestConnectionAsync(
-        string baseUrl,
-        string apiKey,
-        CancellationToken cancellationToken = default)
+    public async Task<ConnectionTestResult> TestConnectionAsync(CancellationToken cancellationToken = default)
     {
+        var baseUrl = _settings.BaseUrl;
         const string path = "api/v3/system/status";
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, BuildUri(baseUrl, path));
-            request.Headers.Add("X-Api-Key", apiKey);
+            request.Headers.Add("X-Api-Key", _settings.ApiKey);
             var response = await _httpClient.SendAsync(request, cancellationToken);
 
             if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)

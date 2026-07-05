@@ -1,7 +1,8 @@
 using FakeItEasy;
 using FluentAssertions;
-using Harrbor.Configuration;
+using Harrbor.Abstractions.RemoteStorage;
 using Harrbor.Data.Entities;
+using Harrbor.Services;
 using Harrbor.Services.Orchestration.Phases;
 using Harrbor.Services.RemoteStorage;
 using Harrbor.Tests.Common;
@@ -27,9 +28,10 @@ public class TransferPhaseTests
         _logger = A.Fake<ILogger<TransferPhaseHandler>>();
     }
 
+    // The tests drive the client-injecting overload directly, so the manager is never invoked.
     private TransferPhaseHandler CreateHandler()
     {
-        return new TransferPhaseHandler(_remoteStorageService, new TransferProgressTracker(), _logger);
+        return new TransferPhaseHandler(A.Fake<IConnectionManager>(), new TransferProgressTracker(), _logger);
     }
 
     [Fact]

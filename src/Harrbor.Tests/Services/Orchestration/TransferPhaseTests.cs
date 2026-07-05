@@ -58,7 +58,7 @@ public class TransferPhaseTests
             .Build();
 
         dbContext.TrackedReleases.AddRange(inProgressRelease1, inProgressRelease2, pendingRelease);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var job = new JobDefinitionBuilder()
             .WithName("test-job")
@@ -89,7 +89,7 @@ public class TransferPhaseTests
             .WithStagingPath("/staging")
             .Build();
         dbContext.TrackedReleases.Add(pendingRelease);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         A.CallTo(() => _remoteStorageService.TransferAsync(
             A<string>._, A<string>._, A<CancellationToken>._))
@@ -106,7 +106,7 @@ public class TransferPhaseTests
         await handler.ExecuteAsync(job, dbContext, _remoteStorageService, CancellationToken.None);
 
         // Assert
-        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedRelease.TransferStatus.Should().Be(TransferStatus.Completed);
         A.CallTo(() => _remoteStorageService.TransferAsync(
             A<string>._, A<string>._, A<CancellationToken>._))
@@ -131,7 +131,7 @@ public class TransferPhaseTests
             .WithStagingPath("/staging")
             .Build();
         dbContext.TrackedReleases.Add(failedRelease);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         A.CallTo(() => _remoteStorageService.ExistsAsync(A<string>._, A<CancellationToken>._))
             .Returns(true);
@@ -151,7 +151,7 @@ public class TransferPhaseTests
         await handler.ExecuteAsync(job, dbContext, _remoteStorageService, CancellationToken.None);
 
         // Assert
-        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedRelease.TransferStatus.Should().Be(TransferStatus.Completed);
     }
 
@@ -171,7 +171,7 @@ public class TransferPhaseTests
             .WithLastErrorAtUtc(errorTime)
             .Build();
         dbContext.TrackedReleases.Add(failedRelease);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var job = new JobDefinitionBuilder()
             .WithName("test-job")
@@ -184,7 +184,7 @@ public class TransferPhaseTests
         await handler.ExecuteAsync(job, dbContext, _remoteStorageService, CancellationToken.None);
 
         // Assert
-        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedRelease.TransferStatus.Should().Be(TransferStatus.Failed);
         A.CallTo(() => _remoteStorageService.TransferAsync(
             A<string>._, A<string>._, A<CancellationToken>._))
@@ -208,7 +208,7 @@ public class TransferPhaseTests
             .WithStagingPath("/staging")
             .Build();
         dbContext.TrackedReleases.Add(release);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         A.CallTo(() => _remoteStorageService.TransferAsync(
             A<string>._, A<string>._, A<CancellationToken>._))
@@ -224,7 +224,7 @@ public class TransferPhaseTests
         await handler.ExecuteAsync(job, dbContext, _remoteStorageService, CancellationToken.None);
 
         // Assert
-        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedRelease.TransferStatus.Should().Be(TransferStatus.Completed);
         updatedRelease.LastError.Should().BeNull();
         updatedRelease.LastErrorAtUtc.Should().BeNull();
@@ -245,7 +245,7 @@ public class TransferPhaseTests
             .WithStagingPath("/staging")
             .Build();
         dbContext.TrackedReleases.Add(release);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         A.CallTo(() => _remoteStorageService.TransferAsync(
             A<string>._, A<string>._, A<CancellationToken>._))
@@ -261,7 +261,7 @@ public class TransferPhaseTests
         await handler.ExecuteAsync(job, dbContext, _remoteStorageService, CancellationToken.None);
 
         // Assert
-        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedRelease.TransferStatus.Should().Be(TransferStatus.Failed);
         updatedRelease.ErrorCount.Should().Be(1);
         updatedRelease.LastError.Should().Be("Connection failed");
@@ -283,7 +283,7 @@ public class TransferPhaseTests
             .WithLastErrorAtUtc(recentErrorTime)
             .Build();
         dbContext.TrackedReleases.Add(failedRelease);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var job = new JobDefinitionBuilder()
             .WithName("test-job")
@@ -296,7 +296,7 @@ public class TransferPhaseTests
         await handler.ExecuteAsync(job, dbContext, _remoteStorageService, CancellationToken.None);
 
         // Assert
-        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedRelease.TransferStatus.Should().Be(TransferStatus.Failed); // Unchanged
         A.CallTo(() => _remoteStorageService.TransferAsync(
             A<string>._, A<string>._, A<CancellationToken>._))

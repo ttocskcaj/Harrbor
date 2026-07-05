@@ -64,7 +64,7 @@ public class DiscoveryPhaseTests
         await handler.ExecuteAsync(job, dbContext, _mediaService, CancellationToken.None);
 
         // Assert
-        var trackedReleases = await dbContext.TrackedReleases.ToListAsync();
+        var trackedReleases = await dbContext.TrackedReleases.ToListAsync(cancellationToken: TestContext.Current.CancellationToken);
         trackedReleases.Should().HaveCount(2);
         trackedReleases.Should().Contain(r => r.DownloadId == "ABC123" && r.Name == "Release 1");
         trackedReleases.Should().Contain(r => r.DownloadId == "DEF456" && r.Name == "Release 2");
@@ -88,7 +88,7 @@ public class DiscoveryPhaseTests
             .WithJobName("test-job")
             .Build();
         dbContext.TrackedReleases.Add(existingRelease);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var job = new JobDefinitionBuilder()
             .WithName("test-job")
@@ -111,7 +111,7 @@ public class DiscoveryPhaseTests
         await handler.ExecuteAsync(job, dbContext, _mediaService, CancellationToken.None);
 
         // Assert
-        var trackedReleases = await dbContext.TrackedReleases.ToListAsync();
+        var trackedReleases = await dbContext.TrackedReleases.ToListAsync(cancellationToken: TestContext.Current.CancellationToken);
         trackedReleases.Should().HaveCount(2); // Original + 1 new
         trackedReleases.Count(r => r.DownloadId == "ABC123").Should().Be(1);
     }
@@ -144,7 +144,7 @@ public class DiscoveryPhaseTests
         await handler.ExecuteAsync(job, dbContext, _mediaService, CancellationToken.None);
 
         // Assert
-        var trackedReleases = await dbContext.TrackedReleases.ToListAsync();
+        var trackedReleases = await dbContext.TrackedReleases.ToListAsync(cancellationToken: TestContext.Current.CancellationToken);
         trackedReleases.Should().HaveCount(1);
         trackedReleases[0].DownloadId.Should().Be("SEASON123");
     }
@@ -167,7 +167,7 @@ public class DiscoveryPhaseTests
         await handler.ExecuteAsync(job, dbContext, _mediaService, CancellationToken.None);
 
         // Assert
-        var trackedReleases = await dbContext.TrackedReleases.ToListAsync();
+        var trackedReleases = await dbContext.TrackedReleases.ToListAsync(cancellationToken: TestContext.Current.CancellationToken);
         trackedReleases.Should().BeEmpty();
     }
 
@@ -200,7 +200,7 @@ public class DiscoveryPhaseTests
         await handler.ExecuteAsync(job, dbContext, _mediaService, CancellationToken.None);
 
         // Assert
-        var release = await dbContext.TrackedReleases.FirstAsync();
+        var release = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         release.RemotePath.Should().Be("/custom/output/path");
     }
 
@@ -233,7 +233,7 @@ public class DiscoveryPhaseTests
         await handler.ExecuteAsync(job, dbContext, _mediaService, CancellationToken.None);
 
         // Assert
-        var release = await dbContext.TrackedReleases.FirstAsync();
+        var release = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         release.RemotePath.Should().Be("/default/path");
     }
 }

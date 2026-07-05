@@ -180,7 +180,7 @@ public class StartupValidatorTests : IDisposable
         var validator = CreateValidator(sonarrOptions: sonarrOptions);
 
         // Act
-        await validator.ValidateAsync();
+        await validator.ValidateAsync(TestContext.Current.CancellationToken);
 
         // Assert
         A.CallTo(() => _sonarrClient.IsHealthyAsync(A<CancellationToken>._))
@@ -202,7 +202,7 @@ public class StartupValidatorTests : IDisposable
         var validator = CreateValidator(radarrOptions: radarrOptions);
 
         // Act
-        await validator.ValidateAsync();
+        await validator.ValidateAsync(TestContext.Current.CancellationToken);
 
         // Assert
         A.CallTo(() => _radarrClient.IsHealthyAsync(A<CancellationToken>._))

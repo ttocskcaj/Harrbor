@@ -51,7 +51,7 @@ public class ExtractionPhaseTests
             .WithLastErrorAtUtc(DateTime.UtcNow.AddHours(-1))
             .Build();
         dbContext.TrackedReleases.Add(release);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         A.CallTo(() => _extractionService.ExtractAsync(A<string>._, A<CancellationToken>._))
             .Returns(new ExtractionResult(true, ArchivesExtracted: 1, Duration: TimeSpan.FromSeconds(2)));
@@ -81,7 +81,7 @@ public class ExtractionPhaseTests
         // Arrange
         using var dbContext = TestDbContextFactory.Create();
         dbContext.TrackedReleases.Add(EligibleRelease().Build());
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         A.CallTo(() => _extractionService.ExtractAsync(A<string>._, A<CancellationToken>._))
             .Returns(new ExtractionResult(true, ArchivesExtracted: 0));
@@ -104,7 +104,7 @@ public class ExtractionPhaseTests
         // Arrange
         using var dbContext = TestDbContextFactory.Create();
         dbContext.TrackedReleases.Add(EligibleRelease().Build());
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         A.CallTo(() => _extractionService.ExtractAsync(A<string>._, A<CancellationToken>._))
             .Returns(new ExtractionResult(false, Error: "Archive volume files found without their first volume: show.r00"));
@@ -130,7 +130,7 @@ public class ExtractionPhaseTests
         // Arrange
         using var dbContext = TestDbContextFactory.Create();
         dbContext.TrackedReleases.Add(EligibleRelease().Build());
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         A.CallTo(() => _extractionService.ExtractAsync(A<string>._, A<CancellationToken>._))
             .Throws(new IOException("disk full"));
@@ -166,7 +166,7 @@ public class ExtractionPhaseTests
             .WithImportStatus(importStatus)
             .Build();
         dbContext.TrackedReleases.Add(release);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var job = new JobDefinitionBuilder().WithName("test-job").Build();
         var handler = CreateHandler();
@@ -186,7 +186,7 @@ public class ExtractionPhaseTests
         // Arrange
         using var dbContext = TestDbContextFactory.Create();
         dbContext.TrackedReleases.Add(EligibleRelease().WithJobName("other-job").Build());
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var job = new JobDefinitionBuilder().WithName("test-job").Build();
         var handler = CreateHandler();
@@ -205,7 +205,7 @@ public class ExtractionPhaseTests
         // Arrange
         using var dbContext = TestDbContextFactory.Create();
         dbContext.TrackedReleases.Add(EligibleRelease().Build());
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var job = new JobDefinitionBuilder()
             .WithName("test-job")
@@ -241,7 +241,7 @@ public class ExtractionPhaseTests
             .WithCreatedAtUtc(DateTime.UtcNow.AddHours(-1))
             .Build();
         dbContext.TrackedReleases.AddRange(newer, older);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var extractedPaths = new List<string>();
         A.CallTo(() => _extractionService.ExtractAsync(A<string>._, A<CancellationToken>._))

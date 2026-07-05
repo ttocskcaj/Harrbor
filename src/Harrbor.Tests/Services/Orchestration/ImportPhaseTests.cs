@@ -51,7 +51,7 @@ public class ImportPhaseTests
             .WithTransferCompletedAtUtc(DateTime.UtcNow.AddMinutes(-5))
             .Build();
         dbContext.TrackedReleases.Add(release);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         A.CallTo(() => _mediaService.IsDownloadInQueueAsync("ABC123", A<CancellationToken>._))
             .Returns(false);
@@ -69,7 +69,7 @@ public class ImportPhaseTests
         await handler.ExecuteAsync(job, dbContext, _mediaService, CancellationToken.None);
 
         // Assert
-        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedRelease.ImportStatus.Should().Be(ImportStatus.Completed);
         updatedRelease.ImportCompletedAtUtc.Should().NotBeNull();
     }
@@ -88,7 +88,7 @@ public class ImportPhaseTests
             .WithTransferCompletedAtUtc(DateTime.UtcNow.AddMinutes(-5))
             .Build();
         dbContext.TrackedReleases.Add(release);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         A.CallTo(() => _mediaService.IsDownloadInQueueAsync("ABC123", A<CancellationToken>._))
             .Returns(false); // Not in queue anymore
@@ -105,7 +105,7 @@ public class ImportPhaseTests
         await handler.ExecuteAsync(job, dbContext, _mediaService, CancellationToken.None);
 
         // Assert
-        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedRelease.ImportStatus.Should().Be(ImportStatus.Failed);
         updatedRelease.LastError.Should().Contain("removed from queue without import");
     }
@@ -124,7 +124,7 @@ public class ImportPhaseTests
             .WithTransferCompletedAtUtc(DateTime.UtcNow.AddMinutes(-5))
             .Build();
         dbContext.TrackedReleases.Add(release);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         A.CallTo(() => _mediaService.IsDownloadInQueueAsync("ABC123", A<CancellationToken>._))
             .Returns(true); // Still in queue, being processed
@@ -140,7 +140,7 @@ public class ImportPhaseTests
         await handler.ExecuteAsync(job, dbContext, _mediaService, CancellationToken.None);
 
         // Assert
-        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedRelease.ImportStatus.Should().Be(ImportStatus.Pending);
         // HasImportedAsync should not be called when item is still in queue
         A.CallTo(() => _mediaService.HasImportedAsync(A<string>._, A<CancellationToken>._))
@@ -161,7 +161,7 @@ public class ImportPhaseTests
             .WithTransferCompletedAtUtc(DateTime.UtcNow.AddHours(-25)) // Completed 25 hours ago
             .Build();
         dbContext.TrackedReleases.Add(release);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         A.CallTo(() => _mediaService.IsDownloadInQueueAsync("ABC123", A<CancellationToken>._))
             .Returns(true); // Still in queue
@@ -177,7 +177,7 @@ public class ImportPhaseTests
         await handler.ExecuteAsync(job, dbContext, _mediaService, CancellationToken.None);
 
         // Assert
-        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedRelease.ImportStatus.Should().Be(ImportStatus.Failed);
         updatedRelease.LastError.Should().Contain("timeout");
     }
@@ -202,7 +202,7 @@ public class ImportPhaseTests
             .WithImportStatus(ImportStatus.Completed)
             .Build();
         dbContext.TrackedReleases.AddRange(pendingRelease, completedRelease);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         A.CallTo(() => _mediaService.IsDownloadInQueueAsync(A<string>._, A<CancellationToken>._))
             .Returns(false);
@@ -234,7 +234,7 @@ public class ImportPhaseTests
             .WithImportStatus(ImportStatus.Pending)
             .Build();
         dbContext.TrackedReleases.Add(pendingTransferRelease);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var job = new JobDefinitionBuilder().WithName("test-job").Build();
         var handler = CreateHandler();
@@ -264,7 +264,7 @@ public class ImportPhaseTests
             .WithTransferCompletedAtUtc(DateTime.UtcNow)
             .Build();
         dbContext.TrackedReleases.Add(release);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var job = new JobDefinitionBuilder().WithName("test-job").Build();
         var handler = CreateHandler();
@@ -292,7 +292,7 @@ public class ImportPhaseTests
             .WithExtractionCompletedAtUtc(DateTime.UtcNow.AddHours(-1))
             .Build();
         dbContext.TrackedReleases.Add(release);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         A.CallTo(() => _mediaService.IsDownloadInQueueAsync("ABC123", A<CancellationToken>._))
             .Returns(true); // Still in queue
@@ -308,7 +308,7 @@ public class ImportPhaseTests
         await handler.ExecuteAsync(job, dbContext, _mediaService, CancellationToken.None);
 
         // Assert - import window starts at extraction completion, so no timeout yet
-        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedRelease.ImportStatus.Should().Be(ImportStatus.Pending);
         updatedRelease.LastError.Should().BeNull();
     }
@@ -327,7 +327,7 @@ public class ImportPhaseTests
             .WithTransferCompletedAtUtc(DateTime.UtcNow.AddHours(-1)) // Completed 1 hour ago
             .Build();
         dbContext.TrackedReleases.Add(release);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         A.CallTo(() => _mediaService.IsDownloadInQueueAsync("ABC123", A<CancellationToken>._))
             .Returns(true); // Still in queue
@@ -343,7 +343,7 @@ public class ImportPhaseTests
         await handler.ExecuteAsync(job, dbContext, _mediaService, CancellationToken.None);
 
         // Assert
-        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedRelease.ImportStatus.Should().Be(ImportStatus.Pending);
         updatedRelease.LastError.Should().BeNull();
     }

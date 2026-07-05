@@ -58,7 +58,7 @@ public class ArchiveExtractionServiceTests : IDisposable
             ("Subs/episode.srt", "subtitle-bytes"));
 
         // Act
-        var result = await _service.ExtractAsync(stagingItem);
+        var result = await _service.ExtractAsync(stagingItem, TestContext.Current.CancellationToken);
 
         // Assert
         result.Success.Should().BeTrue(result.Error);
@@ -78,7 +78,7 @@ public class ArchiveExtractionServiceTests : IDisposable
         CreateZip(zipPath, ("movie.mkv", "video-bytes"));
 
         // Act
-        var result = await _service.ExtractAsync(zipPath);
+        var result = await _service.ExtractAsync(zipPath, TestContext.Current.CancellationToken);
 
         // Assert
         result.Success.Should().BeTrue(result.Error);
@@ -95,7 +95,7 @@ public class ArchiveExtractionServiceTests : IDisposable
         File.WriteAllText(Path.Combine(stagingItem, "release.nfo"), "info");
 
         // Act
-        var result = await _service.ExtractAsync(stagingItem);
+        var result = await _service.ExtractAsync(stagingItem, TestContext.Current.CancellationToken);
 
         // Assert
         result.Success.Should().BeTrue(result.Error);
@@ -106,7 +106,7 @@ public class ArchiveExtractionServiceTests : IDisposable
     public async Task ExtractAsync_MissingStagingItem_Fails()
     {
         // Act
-        var result = await _service.ExtractAsync(Path.Combine(_tempRoot, "does-not-exist"));
+        var result = await _service.ExtractAsync(Path.Combine(_tempRoot, "does-not-exist"), TestContext.Current.CancellationToken);
 
         // Assert
         result.Success.Should().BeFalse();
@@ -121,8 +121,8 @@ public class ArchiveExtractionServiceTests : IDisposable
         CreateZip(Path.Combine(stagingItem, "release.zip"), ("episode.mkv", "video-bytes"));
 
         // Act
-        var first = await _service.ExtractAsync(stagingItem);
-        var second = await _service.ExtractAsync(stagingItem);
+        var first = await _service.ExtractAsync(stagingItem, TestContext.Current.CancellationToken);
+        var second = await _service.ExtractAsync(stagingItem, TestContext.Current.CancellationToken);
 
         // Assert
         first.Success.Should().BeTrue(first.Error);
@@ -138,7 +138,7 @@ public class ArchiveExtractionServiceTests : IDisposable
         File.WriteAllBytes(Path.Combine(stagingItem, "release.r00"), [0x52, 0x61, 0x72, 0x21]);
 
         // Act
-        var result = await _service.ExtractAsync(stagingItem);
+        var result = await _service.ExtractAsync(stagingItem, TestContext.Current.CancellationToken);
 
         // Assert
         result.Success.Should().BeFalse();
@@ -155,7 +155,7 @@ public class ArchiveExtractionServiceTests : IDisposable
         File.WriteAllText(Path.Combine(stagingItem, "episode.mkv"), "video-bytes");
 
         // Act
-        var result = await _service.ExtractAsync(stagingItem);
+        var result = await _service.ExtractAsync(stagingItem, TestContext.Current.CancellationToken);
 
         // Assert
         result.Success.Should().BeTrue(result.Error);
@@ -171,7 +171,7 @@ public class ArchiveExtractionServiceTests : IDisposable
         CreateZip(Path.Combine(stagingItem, "cd2.zip"), ("cd2.mkv", "two"));
 
         // Act
-        var result = await _service.ExtractAsync(stagingItem);
+        var result = await _service.ExtractAsync(stagingItem, TestContext.Current.CancellationToken);
 
         // Assert
         result.Success.Should().BeTrue(result.Error);
@@ -190,7 +190,7 @@ public class ArchiveExtractionServiceTests : IDisposable
         CreateZip(Path.Combine(subDir, "cd1.zip"), ("cd1.mkv", "one"));
 
         // Act
-        var result = await _service.ExtractAsync(stagingItem);
+        var result = await _service.ExtractAsync(stagingItem, TestContext.Current.CancellationToken);
 
         // Assert
         result.Success.Should().BeTrue(result.Error);

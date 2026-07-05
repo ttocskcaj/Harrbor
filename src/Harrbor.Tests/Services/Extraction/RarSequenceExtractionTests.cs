@@ -86,7 +86,7 @@ public class RarSequenceExtractionTests : IDisposable
         Directory.EnumerateFiles(stagingItem).Should().HaveCount(volumeCount, "fixture set should be complete");
 
         // Act
-        var result = await _service.ExtractAsync(stagingItem);
+        var result = await _service.ExtractAsync(stagingItem, TestContext.Current.CancellationToken);
 
         // Assert
         result.Success.Should().BeTrue(result.Error);
@@ -109,7 +109,7 @@ public class RarSequenceExtractionTests : IDisposable
         }
 
         // Act
-        var result = await _service.ExtractAsync(stagingItem);
+        var result = await _service.ExtractAsync(stagingItem, TestContext.Current.CancellationToken);
 
         // Assert
         result.Success.Should().BeTrue(result.Error);
@@ -128,7 +128,7 @@ public class RarSequenceExtractionTests : IDisposable
         var stagingItem = StageFixture("rar5-encrypted");
 
         // Act
-        var result = await _service.ExtractAsync(stagingItem);
+        var result = await _service.ExtractAsync(stagingItem, TestContext.Current.CancellationToken);
 
         // Assert
         result.Success.Should().BeFalse();
@@ -143,7 +143,7 @@ public class RarSequenceExtractionTests : IDisposable
         var stagingItem = StageFixture("rar5-parts", excludeFiles: "parts5.part1.rar");
 
         // Act
-        var result = await _service.ExtractAsync(stagingItem);
+        var result = await _service.ExtractAsync(stagingItem, TestContext.Current.CancellationToken);
 
         // Assert
         result.Success.Should().BeFalse();
@@ -157,7 +157,7 @@ public class RarSequenceExtractionTests : IDisposable
         var stagingItem = StageFixture("rar5-parts", excludeFiles: "parts5.part3.rar");
 
         // Act
-        var result = await _service.ExtractAsync(stagingItem);
+        var result = await _service.ExtractAsync(stagingItem, TestContext.Current.CancellationToken);
 
         // Assert
         result.Success.Should().BeFalse();
@@ -173,7 +173,7 @@ public class RarSequenceExtractionTests : IDisposable
             "oldstyle.r00", "oldstyle.r01", "oldstyle.r02", "oldstyle.r03");
 
         // Act
-        var result = await _service.ExtractAsync(stagingItem);
+        var result = await _service.ExtractAsync(stagingItem, TestContext.Current.CancellationToken);
 
         // Assert
         result.Success.Should().BeFalse();
@@ -187,7 +187,7 @@ public class RarSequenceExtractionTests : IDisposable
         var stagingItem = StageFixture("sevenzip-split");
 
         // Act
-        var result = await _service.ExtractAsync(stagingItem);
+        var result = await _service.ExtractAsync(stagingItem, TestContext.Current.CancellationToken);
 
         // Assert
         result.Success.Should().BeTrue(result.Error);

@@ -45,7 +45,7 @@ public class DownloadPhaseTests
             .WithRemotePath("/downloads/test")
             .Build();
         dbContext.TrackedReleases.Add(release);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var completedTorrent = new TorrentInfo
         {
@@ -65,7 +65,7 @@ public class DownloadPhaseTests
         await handler.ExecuteAsync(job, dbContext, _qBittorrentClient, CancellationToken.None);
 
         // Assert
-        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedRelease.DownloadStatus.Should().Be(DownloadStatus.Completed);
         updatedRelease.DownloadCompletedAtUtc.Should().NotBeNull();
         updatedRelease.RemotePath.Should().Be("/downloads/Test.Release.S01E01");
@@ -83,7 +83,7 @@ public class DownloadPhaseTests
             .WithDownloadStatus(DownloadStatus.Pending)
             .Build();
         dbContext.TrackedReleases.Add(release);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var incompleteTorrent = new TorrentInfo
         {
@@ -101,7 +101,7 @@ public class DownloadPhaseTests
         await handler.ExecuteAsync(job, dbContext, _qBittorrentClient, CancellationToken.None);
 
         // Assert
-        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedRelease.DownloadStatus.Should().Be(DownloadStatus.Pending);
         updatedRelease.DownloadCompletedAtUtc.Should().BeNull();
     }
@@ -118,7 +118,7 @@ public class DownloadPhaseTests
             .WithDownloadStatus(DownloadStatus.Pending)
             .Build();
         dbContext.TrackedReleases.Add(release);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         A.CallTo(() => _qBittorrentClient.GetTorrentAsync("ABC123", A<CancellationToken>._))
             .Returns((TorrentInfo?)null);
@@ -130,7 +130,7 @@ public class DownloadPhaseTests
         await handler.ExecuteAsync(job, dbContext, _qBittorrentClient, CancellationToken.None);
 
         // Assert
-        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedRelease.DownloadStatus.Should().Be(DownloadStatus.Pending);
     }
 
@@ -146,7 +146,7 @@ public class DownloadPhaseTests
             .WithRemotePath("/original/path")
             .Build();
         dbContext.TrackedReleases.Add(release);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var torrent = new TorrentInfo
         {
@@ -166,7 +166,7 @@ public class DownloadPhaseTests
         await handler.ExecuteAsync(job, dbContext, _qBittorrentClient, CancellationToken.None);
 
         // Assert
-        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedRelease.RemotePath.Should().Be("/downloads/actual/content/path");
     }
 
@@ -182,7 +182,7 @@ public class DownloadPhaseTests
             .WithRemotePath("/original/path")
             .Build();
         dbContext.TrackedReleases.Add(release);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var torrent = new TorrentInfo
         {
@@ -202,7 +202,7 @@ public class DownloadPhaseTests
         await handler.ExecuteAsync(job, dbContext, _qBittorrentClient, CancellationToken.None);
 
         // Assert
-        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedRelease.RemotePath.Should().Be("/downloads/Test.Release");
     }
 
@@ -225,7 +225,7 @@ public class DownloadPhaseTests
             .WithRemotePath("/downloads/healthy")
             .Build();
         dbContext.TrackedReleases.AddRange(failing, healthy);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         A.CallTo(() => _qBittorrentClient.GetTorrentAsync("BAD", A<CancellationToken>._))
             .Throws(new QBittorrentClientRequestException("forbidden", HttpStatusCode.Forbidden));
@@ -247,13 +247,13 @@ public class DownloadPhaseTests
         // Assert
         await act.Should().NotThrowAsync();
 
-        var failingAfter = await dbContext.TrackedReleases.FirstAsync(r => r.DownloadId == "BAD");
+        var failingAfter = await dbContext.TrackedReleases.FirstAsync(r => r.DownloadId == "BAD", cancellationToken: TestContext.Current.CancellationToken);
         failingAfter.DownloadStatus.Should().Be(DownloadStatus.Pending, "the failed release is skipped and retried next cycle");
         failingAfter.LastError.Should().Be("forbidden", "the transient error is recorded for visibility");
         failingAfter.LastErrorAtUtc.Should().NotBeNull();
         failingAfter.ErrorCount.Should().Be(0, "a download-query hiccup must not consume the transfer-phase retry budget");
 
-        var healthyAfter = await dbContext.TrackedReleases.FirstAsync(r => r.DownloadId == "GOOD");
+        var healthyAfter = await dbContext.TrackedReleases.FirstAsync(r => r.DownloadId == "GOOD", cancellationToken: TestContext.Current.CancellationToken);
         healthyAfter.DownloadStatus.Should().Be(DownloadStatus.Completed, "other releases are still processed");
     }
 
@@ -271,7 +271,7 @@ public class DownloadPhaseTests
         release.LastError = "forbidden";
         release.LastErrorAtUtc = DateTime.UtcNow.AddMinutes(-5);
         dbContext.TrackedReleases.Add(release);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         A.CallTo(() => _qBittorrentClient.GetTorrentAsync("HASH", A<CancellationToken>._))
             .Returns(new TorrentInfo
@@ -289,7 +289,7 @@ public class DownloadPhaseTests
         await handler.ExecuteAsync(job, dbContext, _qBittorrentClient, CancellationToken.None);
 
         // Assert - a stale error must not follow a completed download into the transfer phase
-        var updated = await dbContext.TrackedReleases.FirstAsync(r => r.DownloadId == "HASH");
+        var updated = await dbContext.TrackedReleases.FirstAsync(r => r.DownloadId == "HASH", cancellationToken: TestContext.Current.CancellationToken);
         updated.DownloadStatus.Should().Be(DownloadStatus.Completed);
         updated.LastError.Should().BeNull();
         updated.LastErrorAtUtc.Should().BeNull();
@@ -308,7 +308,7 @@ public class DownloadPhaseTests
             .WithDownloadStatus(DownloadStatus.Pending)
             .Build();
         dbContext.TrackedReleases.Add(release);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         A.CallTo(() => _qBittorrentClient.GetTorrentAsync("HASH", A<CancellationToken>._))
             .Throws(new InvalidOperationException("unexpected"));
@@ -339,7 +339,7 @@ public class DownloadPhaseTests
             .WithDownloadStatus(DownloadStatus.Completed)
             .Build();
         dbContext.TrackedReleases.AddRange(pendingRelease, completedRelease);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         A.CallTo(() => _qBittorrentClient.GetTorrentAsync("PENDING123", A<CancellationToken>._))
             .Returns(new TorrentInfo { Hash = "PENDING123", Progress = 1.0 });

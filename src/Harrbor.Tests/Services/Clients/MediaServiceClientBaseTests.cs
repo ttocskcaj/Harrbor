@@ -40,7 +40,7 @@ public class MediaServiceClientBaseTests : IDisposable
         _handler.QueueJsonResponse(queueResponse);
 
         // Act
-        var result = await _client.GetQueueAsync();
+        var result = await _client.GetQueueAsync(TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().HaveCount(2);
@@ -73,7 +73,7 @@ public class MediaServiceClientBaseTests : IDisposable
         _handler.QueueJsonResponse(page2);
 
         // Act
-        var result = await _client.GetQueueAsync();
+        var result = await _client.GetQueueAsync(TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().HaveCount(150);
@@ -91,7 +91,7 @@ public class MediaServiceClientBaseTests : IDisposable
         _handler.QueueJsonResponse(queueResponse);
 
         // Act
-        var result = await _client.GetQueueAsync();
+        var result = await _client.GetQueueAsync(TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().BeEmpty();
@@ -109,7 +109,7 @@ public class MediaServiceClientBaseTests : IDisposable
         _handler.QueueJsonResponse(queueResponse);
 
         // Act
-        var result = await _client.GetQueueAsync();
+        var result = await _client.GetQueueAsync(TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().HaveCount(2);
@@ -133,7 +133,7 @@ public class MediaServiceClientBaseTests : IDisposable
         _handler.QueueJsonResponse(queueResponse);
 
         // Act
-        var result = await _client.GetQueueAsync();
+        var result = await _client.GetQueueAsync(TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().HaveCount(2);
@@ -152,7 +152,7 @@ public class MediaServiceClientBaseTests : IDisposable
         _handler.QueueJsonResponse(queueResponse);
 
         // Act
-        var result = await _client.IsDownloadInQueueAsync("ABC123");
+        var result = await _client.IsDownloadInQueueAsync("ABC123", TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().BeTrue();
@@ -169,7 +169,7 @@ public class MediaServiceClientBaseTests : IDisposable
         _handler.QueueJsonResponse(queueResponse);
 
         // Act
-        var result = await _client.IsDownloadInQueueAsync("NOTFOUND");
+        var result = await _client.IsDownloadInQueueAsync("NOTFOUND", TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().BeFalse();
@@ -186,7 +186,7 @@ public class MediaServiceClientBaseTests : IDisposable
         _handler.QueueJsonResponse(queueResponse);
 
         // Act
-        var result = await _client.IsDownloadInQueueAsync("ABC123DEF");
+        var result = await _client.IsDownloadInQueueAsync("ABC123DEF", TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().BeTrue();
@@ -210,7 +210,7 @@ public class MediaServiceClientBaseTests : IDisposable
         _handler.QueueJsonResponse(historyResponse);
 
         // Act
-        var result = await _client.HasImportedAsync("ABC123");
+        var result = await _client.HasImportedAsync("ABC123", TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().BeTrue();
@@ -230,7 +230,7 @@ public class MediaServiceClientBaseTests : IDisposable
         _handler.QueueJsonResponse(historyResponse);
 
         // Act
-        var result = await _client.HasImportedAsync("ABC123");
+        var result = await _client.HasImportedAsync("ABC123", TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().BeFalse();
@@ -258,7 +258,7 @@ public class MediaServiceClientBaseTests : IDisposable
         _handler.QueueJsonResponse(historyResponse);
 
         // Act
-        var result = await _client.HasImportedAsync("ABC123");
+        var result = await _client.HasImportedAsync("ABC123", TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().BeFalse();
@@ -278,7 +278,7 @@ public class MediaServiceClientBaseTests : IDisposable
         _handler.QueueJsonResponse(historyResponse);
 
         // Act
-        var result = await _client.HasImportedAsync("ABC123");
+        var result = await _client.HasImportedAsync("ABC123", TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().BeTrue();
@@ -292,7 +292,7 @@ public class MediaServiceClientBaseTests : IDisposable
         _handler.QueueJsonResponse(historyResponse);
 
         // Act
-        var result = await _client.HasImportedAsync("ABC123");
+        var result = await _client.HasImportedAsync("ABC123", TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().BeFalse();
@@ -305,7 +305,7 @@ public class MediaServiceClientBaseTests : IDisposable
         _handler.QueueResponse(HttpStatusCode.OK, new { version = "4.0.0" });
 
         // Act
-        var result = await _client.IsHealthyAsync();
+        var result = await _client.IsHealthyAsync(TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().BeTrue();
@@ -319,7 +319,7 @@ public class MediaServiceClientBaseTests : IDisposable
         _handler.QueueErrorResponse(HttpStatusCode.Unauthorized, "Unauthorized");
 
         // Act
-        var result = await _client.IsHealthyAsync();
+        var result = await _client.IsHealthyAsync(TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().BeFalse();
@@ -332,7 +332,7 @@ public class MediaServiceClientBaseTests : IDisposable
         _handler.QueueErrorResponse(HttpStatusCode.InternalServerError, "Server Error");
 
         // Act
-        var result = await _client.IsHealthyAsync();
+        var result = await _client.IsHealthyAsync(TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().BeFalse();
@@ -346,7 +346,7 @@ public class MediaServiceClientBaseTests : IDisposable
         _handler.QueueJsonResponse(queueResponse);
 
         // Act
-        await _client.GetQueueAsync();
+        await _client.GetQueueAsync(TestContext.Current.CancellationToken);
 
         // Assert
         var request = _handler.Requests.First();

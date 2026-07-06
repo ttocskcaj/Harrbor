@@ -18,6 +18,7 @@ public class PipelineCounts
     public int Discover { get; set; }
     public int Download { get; set; }
     public int Transfer { get; set; }
+    public int Extraction { get; set; }
     public int Import { get; set; }
     public int Cleanup { get; set; }
     public int Archival { get; set; }

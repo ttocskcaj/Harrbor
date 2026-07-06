@@ -21,6 +21,7 @@ public static class ReleaseMapping
         ReleasePhase.Discover,
         ReleasePhase.Download,
         ReleasePhase.Transfer,
+        ReleasePhase.Extraction,
         ReleasePhase.Import,
         ReleasePhase.Cleanup,
         ReleasePhase.Archival
@@ -31,6 +32,7 @@ public static class ReleaseMapping
         if (r.ArchivalStatus == ArchivalStatus.Completed) return ReleasePhase.Done;
         if (r.DownloadStatus != DownloadStatus.Completed) return ReleasePhase.Download;
         if (r.TransferStatus != TransferStatus.Completed) return ReleasePhase.Transfer;
+        if (r.ExtractionStatus != ExtractionStatus.Completed) return ReleasePhase.Extraction;
         if (r.ImportStatus != ImportStatus.Completed) return ReleasePhase.Import;
         if (r.CleanupStatus != CleanupStatus.Completed) return ReleasePhase.Cleanup;
         return ReleasePhase.Archival;
@@ -86,7 +88,8 @@ public static class ReleaseMapping
         ReleasePhase.Discover => r.CreatedAtUtc,
         ReleasePhase.Download => r.CreatedAtUtc,
         ReleasePhase.Transfer => r.TransferStartedAtUtc ?? r.DownloadCompletedAtUtc,
-        ReleasePhase.Import => r.TransferCompletedAtUtc,
+        ReleasePhase.Extraction => r.ExtractionStartedAtUtc ?? r.TransferCompletedAtUtc,
+        ReleasePhase.Import => r.ExtractionCompletedAtUtc ?? r.TransferCompletedAtUtc,
         ReleasePhase.Cleanup => r.ImportCompletedAtUtc,
         ReleasePhase.Archival => r.CleanupCompletedAtUtc,
         ReleasePhase.Done => r.ArchivedAtUtc,
@@ -98,6 +101,7 @@ public static class ReleaseMapping
         ReleasePhase.Discover => r.CreatedAtUtc,
         ReleasePhase.Download => r.DownloadCompletedAtUtc,
         ReleasePhase.Transfer => r.TransferCompletedAtUtc,
+        ReleasePhase.Extraction => r.ExtractionCompletedAtUtc,
         ReleasePhase.Import => r.ImportCompletedAtUtc,
         ReleasePhase.Cleanup => r.CleanupCompletedAtUtc,
         ReleasePhase.Archival => r.ArchivedAtUtc,
@@ -109,6 +113,7 @@ public static class ReleaseMapping
         ReleasePhase.Discover => true,
         ReleasePhase.Download => r.DownloadStatus == DownloadStatus.Completed,
         ReleasePhase.Transfer => r.TransferStatus == TransferStatus.Completed,
+        ReleasePhase.Extraction => r.ExtractionStatus == ExtractionStatus.Completed,
         ReleasePhase.Import => r.ImportStatus == ImportStatus.Completed,
         ReleasePhase.Cleanup => r.CleanupStatus == CleanupStatus.Completed,
         ReleasePhase.Archival => r.ArchivalStatus == ArchivalStatus.Completed,
@@ -118,6 +123,7 @@ public static class ReleaseMapping
     private static bool IsPhaseFailed(TrackedRelease r, ReleasePhase phase) => phase switch
     {
         ReleasePhase.Transfer => r.TransferStatus == TransferStatus.Failed,
+        ReleasePhase.Extraction => r.ExtractionStatus == ExtractionStatus.Failed,
         ReleasePhase.Import => r.ImportStatus == ImportStatus.Failed,
         ReleasePhase.Cleanup => r.CleanupStatus == CleanupStatus.Failed,
         ReleasePhase.Archival => r.ArchivalStatus == ArchivalStatus.Failed,

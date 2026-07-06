@@ -29,7 +29,7 @@ public class TorrentClientTests
             .Returns(expectedTorrents);
 
         // Act
-        var result = await client.GetTorrentListAsync("sonarr", null);
+        var result = await client.GetTorrentListAsync("sonarr", null, TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().HaveCount(2);
@@ -51,7 +51,7 @@ public class TorrentClientTests
             .Returns(expectedTorrents);
 
         // Act
-        var result = await client.GetTorrentListAsync(null, tags);
+        var result = await client.GetTorrentListAsync(null, tags, TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().HaveCount(1);
@@ -64,7 +64,7 @@ public class TorrentClientTests
         var client = A.Fake<ITorrentClient>();
 
         // Act
-        await client.EnsureCategoryExistsAsync("new-category");
+        await client.EnsureCategoryExistsAsync("new-category", TestContext.Current.CancellationToken);
 
         // Assert
         A.CallTo(() => client.EnsureCategoryExistsAsync("new-category", A<CancellationToken>._))
@@ -82,7 +82,7 @@ public class TorrentClientTests
             .Returns(expectedResult);
 
         // Act
-        var result = await client.TestConnectionAsync();
+        var result = await client.TestConnectionAsync(TestContext.Current.CancellationToken);
 
         // Assert
         result.Success.Should().BeTrue();
@@ -101,7 +101,7 @@ public class TorrentClientTests
             .Returns(expectedResult);
 
         // Act
-        var result = await client.TestConnectionAsync();
+        var result = await client.TestConnectionAsync(TestContext.Current.CancellationToken);
 
         // Assert
         result.Success.Should().BeFalse();
@@ -119,7 +119,7 @@ public class TorrentClientTests
             .Returns(expectedTorrent);
 
         // Act
-        var result = await client.GetTorrentAsync("abc123");
+        var result = await client.GetTorrentAsync("abc123", TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().NotBeNull();
@@ -136,7 +136,7 @@ public class TorrentClientTests
             .Returns((TorrentSnapshot?)null);
 
         // Act
-        var result = await client.GetTorrentAsync("notfound");
+        var result = await client.GetTorrentAsync("notfound", TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().BeNull();
@@ -149,7 +149,7 @@ public class TorrentClientTests
         var client = A.Fake<ITorrentClient>();
 
         // Act
-        await client.SetCategoryAsync("abc123", "completed");
+        await client.SetCategoryAsync("abc123", "completed", TestContext.Current.CancellationToken);
 
         // Assert
         A.CallTo(() => client.SetCategoryAsync("abc123", "completed", A<CancellationToken>._))
@@ -164,7 +164,7 @@ public class TorrentClientTests
         A.CallTo(() => client.IsConnectedAsync(A<CancellationToken>._)).Returns(true);
 
         // Act
-        var result = await client.IsConnectedAsync();
+        var result = await client.IsConnectedAsync(TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().BeTrue();
@@ -178,7 +178,7 @@ public class TorrentClientTests
         A.CallTo(() => client.IsConnectedAsync(A<CancellationToken>._)).Returns(false);
 
         // Act
-        var result = await client.IsConnectedAsync();
+        var result = await client.IsConnectedAsync(TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().BeFalse();

@@ -16,6 +16,7 @@ public class JobRequest
     public int MaxTransferRetries { get; set; } = 3;
     public int TransferRetryDelaySeconds { get; set; } = 300;
     public string? CompletedCategory { get; set; }
+    public bool ExtractionEnabled { get; set; } = true;
     public int ImportTimeoutSeconds { get; set; } = 86400;
 }
 
@@ -36,6 +37,7 @@ public class JobResponse
     public int MaxTransferRetries { get; set; }
     public int TransferRetryDelaySeconds { get; set; }
     public string? CompletedCategory { get; set; }
+    public bool ExtractionEnabled { get; set; }
     public int ImportTimeoutSeconds { get; set; }
     public DateTime CreatedAtUtc { get; set; }
     public DateTime UpdatedAtUtc { get; set; }

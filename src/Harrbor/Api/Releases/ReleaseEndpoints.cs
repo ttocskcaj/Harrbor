@@ -147,8 +147,10 @@ public static class ReleaseEndpoints
         ReleasePhase.Download => query.Where(r => r.DownloadStatus != DownloadStatus.Completed),
         ReleasePhase.Transfer => query.Where(r =>
             r.DownloadStatus == DownloadStatus.Completed && r.TransferStatus != TransferStatus.Completed),
+        ReleasePhase.Extraction => query.Where(r =>
+            r.TransferStatus == TransferStatus.Completed && r.ExtractionStatus != ExtractionStatus.Completed),
         ReleasePhase.Import => query.Where(r =>
-            r.TransferStatus == TransferStatus.Completed && r.ImportStatus != ImportStatus.Completed),
+            r.ExtractionStatus == ExtractionStatus.Completed && r.ImportStatus != ImportStatus.Completed),
         ReleasePhase.Cleanup => query.Where(r =>
             r.ImportStatus == ImportStatus.Completed && r.CleanupStatus != CleanupStatus.Completed),
         ReleasePhase.Archival => query.Where(r =>

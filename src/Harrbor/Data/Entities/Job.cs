@@ -26,6 +26,10 @@ public class Job
     public int MaxTransferRetries { get; set; } = 3;
     public TimeSpan TransferRetryDelay { get; set; } = TimeSpan.FromMinutes(5);
     public string? CompletedCategory { get; set; }
+
+    /// <summary>Unpack zip/rar/7z archives in staging after transfer, before import.</summary>
+    public bool ExtractionEnabled { get; set; } = true;
+
     public TimeSpan ImportTimeout { get; set; } = TimeSpan.FromHours(24);
     public DateTime CreatedAtUtc { get; set; }
     public DateTime UpdatedAtUtc { get; set; }
@@ -47,6 +51,7 @@ public class Job
         MaxTransferRetries = MaxTransferRetries,
         TransferRetryDelay = TransferRetryDelay,
         CompletedCategory = CompletedCategory,
+        ExtractionEnabled = ExtractionEnabled,
         ImportTimeout = ImportTimeout
     };
 }

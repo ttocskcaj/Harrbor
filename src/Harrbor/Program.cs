@@ -6,6 +6,7 @@ using Harrbor.Data;
 using Harrbor.Data.Entities;
 using Harrbor.Services;
 using Harrbor.Services.Configuration;
+using Harrbor.Services.Extraction;
 using Harrbor.Services.Health;
 using Harrbor.Services.Orchestration;
 using Harrbor.Services.Orchestration.Phases;
@@ -56,6 +57,10 @@ try
     builder.Services.AddSingleton<IConnectionStore, ConnectionStore>();
     builder.Services.AddSingleton<ITransferProgressTracker, TransferProgressTracker>();
 
+    // Archive extraction is not a per-connection client, so it is registered directly
+    // rather than through the connection provider registry.
+    builder.Services.AddScoped<IArchiveExtractionService, ArchiveExtractionService>();
+
     // Connection providers (the code-defined "kinds") are registered in a provider registry. The
     // connection manager builds/caches live clients per connection instance (by id) at runtime,
     // replacing keyed DI and the per-category resolvers.
@@ -66,6 +71,7 @@ try
     builder.Services.AddScoped<IDiscoveryPhaseHandler, DiscoveryPhaseHandler>();
     builder.Services.AddScoped<IDownloadPhaseHandler, DownloadPhaseHandler>();
     builder.Services.AddScoped<ITransferPhaseHandler, TransferPhaseHandler>();
+    builder.Services.AddScoped<IExtractionPhaseHandler, ExtractionPhaseHandler>();
     builder.Services.AddScoped<IImportPhaseHandler, ImportPhaseHandler>();
     builder.Services.AddScoped<ICleanupPhaseHandler, CleanupPhaseHandler>();
     builder.Services.AddScoped<IArchivalPhaseHandler, ArchivalPhaseHandler>();
@@ -121,6 +127,26 @@ try
             logger.LogInformation(
                 "Reset {Count} stuck transfers to Pending state",
                 stuckTransfers.Count);
+        }
+
+        // Reset any stuck InProgress extractions (safe to redo: extraction overwrites existing output)
+        var stuckExtractions = await db.TrackedReleases
+            .Where(r => r.ExtractionStatus == ExtractionStatus.InProgress)
+            .ToListAsync();
+
+        if (stuckExtractions.Count > 0)
+        {
+            foreach (var release in stuckExtractions)
+            {
+                release.ExtractionStatus = ExtractionStatus.Pending;
+                release.ExtractionStartedAtUtc = null;
+            }
+            await db.SaveChangesAsync();
+
+            var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+            logger.LogInformation(
+                "Reset {Count} stuck extractions to Pending state",
+                stuckExtractions.Count);
         }
     }
 

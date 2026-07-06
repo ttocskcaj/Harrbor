@@ -26,18 +26,19 @@ public class ReleaseMappingTests
     };
 
     [Theory]
-    [InlineData(DownloadStatus.Pending, TransferStatus.Pending, ImportStatus.Pending, CleanupStatus.Pending, ArchivalStatus.Pending, ReleasePhase.Download)]
-    [InlineData(DownloadStatus.Completed, TransferStatus.Pending, ImportStatus.Pending, CleanupStatus.Pending, ArchivalStatus.Pending, ReleasePhase.Transfer)]
-    [InlineData(DownloadStatus.Completed, TransferStatus.InProgress, ImportStatus.Pending, CleanupStatus.Pending, ArchivalStatus.Pending, ReleasePhase.Transfer)]
-    [InlineData(DownloadStatus.Completed, TransferStatus.Completed, ImportStatus.Pending, CleanupStatus.Pending, ArchivalStatus.Pending, ReleasePhase.Import)]
-    [InlineData(DownloadStatus.Completed, TransferStatus.Completed, ImportStatus.Completed, CleanupStatus.Pending, ArchivalStatus.Pending, ReleasePhase.Cleanup)]
-    [InlineData(DownloadStatus.Completed, TransferStatus.Completed, ImportStatus.Completed, CleanupStatus.Completed, ArchivalStatus.Pending, ReleasePhase.Archival)]
-    [InlineData(DownloadStatus.Completed, TransferStatus.Completed, ImportStatus.Completed, CleanupStatus.Completed, ArchivalStatus.Completed, ReleasePhase.Done)]
+    [InlineData(DownloadStatus.Pending, TransferStatus.Pending, ExtractionStatus.Pending, ImportStatus.Pending, CleanupStatus.Pending, ArchivalStatus.Pending, ReleasePhase.Download)]
+    [InlineData(DownloadStatus.Completed, TransferStatus.Pending, ExtractionStatus.Pending, ImportStatus.Pending, CleanupStatus.Pending, ArchivalStatus.Pending, ReleasePhase.Transfer)]
+    [InlineData(DownloadStatus.Completed, TransferStatus.InProgress, ExtractionStatus.Pending, ImportStatus.Pending, CleanupStatus.Pending, ArchivalStatus.Pending, ReleasePhase.Transfer)]
+    [InlineData(DownloadStatus.Completed, TransferStatus.Completed, ExtractionStatus.Pending, ImportStatus.Pending, CleanupStatus.Pending, ArchivalStatus.Pending, ReleasePhase.Extraction)]
+    [InlineData(DownloadStatus.Completed, TransferStatus.Completed, ExtractionStatus.Completed, ImportStatus.Pending, CleanupStatus.Pending, ArchivalStatus.Pending, ReleasePhase.Import)]
+    [InlineData(DownloadStatus.Completed, TransferStatus.Completed, ExtractionStatus.Completed, ImportStatus.Completed, CleanupStatus.Pending, ArchivalStatus.Pending, ReleasePhase.Cleanup)]
+    [InlineData(DownloadStatus.Completed, TransferStatus.Completed, ExtractionStatus.Completed, ImportStatus.Completed, CleanupStatus.Completed, ArchivalStatus.Pending, ReleasePhase.Archival)]
+    [InlineData(DownloadStatus.Completed, TransferStatus.Completed, ExtractionStatus.Completed, ImportStatus.Completed, CleanupStatus.Completed, ArchivalStatus.Completed, ReleasePhase.Done)]
     public void DeriveCurrentPhase_WalksPhasesInOrder(
-        DownloadStatus dl, TransferStatus tr, ImportStatus im, CleanupStatus cl, ArchivalStatus ar, ReleasePhase expected)
+        DownloadStatus dl, TransferStatus tr, ExtractionStatus ex, ImportStatus im, CleanupStatus cl, ArchivalStatus ar, ReleasePhase expected)
     {
         var release = new TrackedReleaseBuilder()
-            .WithDownloadStatus(dl).WithTransferStatus(tr).WithImportStatus(im)
+            .WithDownloadStatus(dl).WithTransferStatus(tr).WithExtractionStatus(ex).WithImportStatus(im)
             .WithCleanupStatus(cl).WithArchivalStatus(ar)
             .Build();
 
@@ -139,10 +140,11 @@ public class ReleaseMappingTests
 
         var detail = ReleaseMapping.ToDetail(release, JobEntity(), Now);
 
-        detail.Timeline.Should().HaveCount(6);
+        detail.Timeline.Should().HaveCount(7);
         Entry(detail, ReleasePhase.Discover).State.Should().Be(PhaseTimelineState.Done);
         Entry(detail, ReleasePhase.Download).State.Should().Be(PhaseTimelineState.Done);
         Entry(detail, ReleasePhase.Transfer).State.Should().Be(PhaseTimelineState.Current);
+        Entry(detail, ReleasePhase.Extraction).State.Should().Be(PhaseTimelineState.Pending);
         Entry(detail, ReleasePhase.Import).State.Should().Be(PhaseTimelineState.Pending);
         Entry(detail, ReleasePhase.Archival).State.Should().Be(PhaseTimelineState.Pending);
     }
@@ -170,6 +172,7 @@ public class ReleaseMappingTests
             .WithDownloadStatus(DownloadStatus.Completed)
             .WithTransferStatus(TransferStatus.Completed)
             .WithTransferCompletedAtUtc(Now.AddMinutes(-10)) // import phase started here
+            .WithExtractionStatus(ExtractionStatus.Completed)
             .WithImportStatus(ImportStatus.Pending)
             .Build();
 

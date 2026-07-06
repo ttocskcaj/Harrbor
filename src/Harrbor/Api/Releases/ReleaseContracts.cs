@@ -10,6 +10,7 @@ public enum ReleasePhase
     Discover,
     Download,
     Transfer,
+    Extraction,
     Import,
     Cleanup,
     Archival,

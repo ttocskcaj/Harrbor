@@ -43,7 +43,7 @@ Validation errors come back as HTTP 400 with a field-keyed `errors` object.
 
 ## Jobs API
 
-Each job watches one qBittorrent category and runs the six-phase pipeline on its own polling interval. Full CRUD:
+Each job watches one qBittorrent category and runs the seven-phase pipeline on its own polling interval. Full CRUD:
 
 | Endpoint | Methods |
 |----------|---------|
@@ -69,6 +69,7 @@ Deleting a job that still has releases mid-pipeline returns **409 Conflict** wit
 | `transferParallelism` | `2` | Max concurrent transfers (1–16) |
 | `maxTransferRetries` | `3` | Retry attempts for failed transfers (0–20) |
 | `transferRetryDelaySeconds` | `300` | Cooldown between retries |
+| `extractionEnabled` | `true` | Unpack zip/rar/7z archives in staging after transfer |
 | `importTimeoutSeconds` | `86400` | Max time to wait for import (60–604800) |
 
 Job responses additionally report `lastRunAtUtc`, `nextRunAtUtc`, and `activeReleaseCount`.

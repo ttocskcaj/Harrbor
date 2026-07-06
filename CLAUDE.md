@@ -43,14 +43,15 @@ pnpm build            # type-check (tsc -b) + production build to ui/dist
 
 ### Core Workflow (OrchestrationWorker)
 
-`OrchestrationWorker` is a `BackgroundService` running a single scheduler loop (5-second tick) that re-reads enabled jobs from the database every tick and starts a reconciliation cycle for each job whose polling interval has elapsed (no overlapping cycles per job). Each cycle runs in its own DI scope via `JobCycleRunner` and processes releases through six sequential phases:
+`OrchestrationWorker` is a `BackgroundService` running a single scheduler loop (5-second tick) that re-reads enabled jobs from the database every tick and starts a reconciliation cycle for each job whose polling interval has elapsed (no overlapping cycles per job). Each cycle runs in its own DI scope via `JobCycleRunner` and processes releases through seven sequential phases:
 
 1. **Discover** - Query Sonarr/Radarr queue for new downloads, create `TrackedRelease` records
 2. **Process Downloads** - Check qBittorrent for completed torrents, update status when progress=100%
 3. **Process Transfers** - Run rclone transfers from seedbox to local staging (with parallelism limits and retry logic)
-4. **Process Imports** - Verify Sonarr/Radarr has imported from staging to final library
-5. **Process Cleanup** - Delete files from staging after confirmed import
-6. **Process Archival** - Change torrent category in qBittorrent to prevent re-processing
+4. **Process Extractions** - Unpack zip/rar/7z archives in staging (SharpCompress; detects old-style `.r00` and new-style `.partN.rar` volume sets)
+5. **Process Imports** - Verify Sonarr/Radarr has imported from staging to final library
+6. **Process Cleanup** - Delete files from staging after confirmed import
+7. **Process Archival** - Change torrent category in qBittorrent to prevent re-processing
 
 ### Key Abstractions
 
@@ -59,12 +60,13 @@ Connections are organized into **categories** (`ConnectionCategory`: `MediaServi
 - **IMediaService** - Category abstraction over Servarr APIs (Sonarr/Radarr) for queue queries and import confirmation. `MediaServiceClientBase` implements the shared v3 logic; `SonarrClient`/`RadarrClient` are thin subclasses. Registered keyed by type; resolved per job via **`MediaServiceResolver`** off `job.MediaServiceType`.
 - **ITorrentClient** - Category abstraction over torrent download clients (qBittorrent today via `QBittorrentTorrentClient`), returning the Harrbor-owned `TorrentSnapshot` DTO rather than vendor types. Registered keyed by type; resolved per job via **`TorrentClientResolver`** off `job.DownloadClientType`.
 - **IRemoteStorageService** - rclone-based SFTP transfers from seedbox (one storage type, not yet job-selectable).
+- **IArchiveExtractionService** - SharpCompress-based archive extraction in staging (not a per-connection client; injected directly into the extraction phase handler).
 - **ConnectionCatalog / ConnectionDescriptor** - The registry that makes the above data-driven; consumers iterate `catalog.Descriptors` / resolve keyed clients by type key rather than switching on a hard-coded enum.
 
 ### Data Model
 
 `TrackedRelease` tracks each download through the pipeline with status enums for each phase:
-- `DownloadStatus`, `TransferStatus`, `ImportStatus`, `CleanupStatus`, `ArchivalStatus`
+- `DownloadStatus`, `TransferStatus`, `ExtractionStatus`, `ImportStatus`, `CleanupStatus`, `ArchivalStatus`
 - Error tracking: `ErrorCount`, `LastError`, `LastErrorAtUtc`
 - Timestamps for each phase completion
 
@@ -72,13 +74,14 @@ Connections are organized into **categories** (`ConnectionCategory`: `MediaServi
 
 All operational configuration lives in the SQLite database and is managed through the REST API under `/api` — changes apply live (connections on next use, jobs on the next scheduler tick):
 - **Connections** (`ServiceConnections` table, one JSON-settings row per type): qBittorrent, Sonarr, Radarr, Remote Storage/SFTP. Accessed via the singleton `IConnectionStore`; rows carry a `Version` stamp consumers use to rebuild expensive clients only when config changes. Secrets are stored plaintext (Servarr-style) but are **write-only through the API** (`passwordSet`/`apiKeySet` flags; null keeps, `""` clears, value replaces).
-- **Jobs** (`Jobs` table, typed columns): full CRUD at `/api/jobs`; `POST /api/connections/{type}/test` tests unsaved payloads with stored-secret fallback. `JobDefinition` remains the immutable per-cycle snapshot type passed to phase handlers (`Job.ToDefinition()`).
+- **Jobs** (`Jobs` table, typed columns): full CRUD at `/api/jobs`; `POST /api/connections/{type}/test` tests unsaved payloads with stored-secret fallback. Per-job `ExtractionEnabled` (default true) toggles the extraction phase. `JobDefinition` remains the immutable per-cycle snapshot type passed to phase handlers (`Job.ToDefinition()`).
 
 Only bootstrap config stays file-based (`appsettings.default.json`): `Serilog` and `Harrbor:DataPath`. `appsettings.local.json` (not committed) can still override those.
 
 ## Key Packages
 
 - `QBittorrent.Client` - qBittorrent WebUI API client
+- `SharpCompress` - zip/rar/7z extraction (MIT licensed, pure .NET)
 - `Microsoft.EntityFrameworkCore.Sqlite` - Persistent state storage
 - `Microsoft.Extensions.Http.Resilience` - HTTP client retry/circuit breaker policies
 - `Serilog` - Structured logging

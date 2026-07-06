@@ -24,6 +24,7 @@ public class HarrborDbContext : DbContext
             entity.HasIndex(e => e.DownloadId).IsUnique();
             entity.HasIndex(e => e.DownloadStatus);
             entity.HasIndex(e => e.TransferStatus);
+            entity.HasIndex(e => e.ExtractionStatus);
             entity.HasIndex(e => e.ImportStatus);
             entity.HasIndex(e => e.JobName);
             entity.HasIndex(e => e.Outcome);

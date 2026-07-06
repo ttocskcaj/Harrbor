@@ -75,17 +75,22 @@ public class DashboardEndpointTests : IDisposable
             Release("TR", b => b
                 .WithDownloadStatus(DownloadStatus.Completed).WithTransferStatus(TransferStatus.InProgress)
                 .WithTransferStartedAtUtc(DateTime.UtcNow)),
+            Release("EX", b => b
+                .WithDownloadStatus(DownloadStatus.Completed).WithTransferStatus(TransferStatus.Completed)
+                .WithExtractionStatus(ExtractionStatus.Pending).WithTransferCompletedAtUtc(DateTime.UtcNow)),
             Release("IM", b => b
                 .WithDownloadStatus(DownloadStatus.Completed).WithTransferStatus(TransferStatus.Completed)
+                .WithExtractionStatus(ExtractionStatus.Completed)
                 .WithImportStatus(ImportStatus.Pending).WithTransferCompletedAtUtc(DateTime.UtcNow)));
 
         var dashboard = await _client.GetFromJsonAsync<DashboardResponse>("/api/dashboard", TestJson.Options);
 
         dashboard!.Pipeline.Download.Should().Be(1);
         dashboard.Pipeline.Transfer.Should().Be(1);
+        dashboard.Pipeline.Extraction.Should().Be(1);
         dashboard.Pipeline.Import.Should().Be(1);
         dashboard.Throughput.TransfersInProgress.Should().Be(1);
-        dashboard.Jobs.Single().ActiveReleaseCount.Should().Be(3);
+        dashboard.Jobs.Single().ActiveReleaseCount.Should().Be(4);
     }
 
     [Fact]

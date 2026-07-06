@@ -45,7 +45,7 @@ public class ArchivalPhaseTests
             .WithArchivalStatus(ArchivalStatus.Pending)
             .Build();
         dbContext.TrackedReleases.Add(release);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var job = new JobDefinitionBuilder()
             .WithName("test-job")
@@ -58,7 +58,7 @@ public class ArchivalPhaseTests
         await handler.ExecuteAsync(job, dbContext, _torrentClient, CancellationToken.None);
 
         // Assert
-        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedRelease.ArchivalStatus.Should().Be(ArchivalStatus.Completed);
         updatedRelease.ArchivedAtUtc.Should().NotBeNull();
         updatedRelease.Outcome.Should().Be(PipelineOutcome.Completed);
@@ -81,7 +81,7 @@ public class ArchivalPhaseTests
             .WithArchivalStatus(ArchivalStatus.Pending)
             .Build();
         dbContext.TrackedReleases.Add(release);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var job = new JobDefinitionBuilder()
             .WithName("test-job")
@@ -94,7 +94,7 @@ public class ArchivalPhaseTests
         await handler.ExecuteAsync(job, dbContext, _torrentClient, CancellationToken.None);
 
         // Assert
-        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedRelease.ArchivalStatus.Should().Be(ArchivalStatus.Completed);
 
         A.CallTo(() => _torrentClient.SetCategoryAsync(A<string>._, A<string>._, A<CancellationToken>._))
@@ -113,7 +113,7 @@ public class ArchivalPhaseTests
             .WithArchivalStatus(ArchivalStatus.Pending)
             .Build();
         dbContext.TrackedReleases.Add(release);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         A.CallTo(() => _torrentClient.SetCategoryAsync("ABC123", "completed", A<CancellationToken>._))
             .Throws(new Exception("Torrent not found"));
@@ -129,7 +129,7 @@ public class ArchivalPhaseTests
         await handler.ExecuteAsync(job, dbContext, _torrentClient, CancellationToken.None);
 
         // Assert
-        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedRelease.ArchivalStatus.Should().Be(ArchivalStatus.Failed);
         updatedRelease.Outcome.Should().Be(PipelineOutcome.Failed);
         updatedRelease.ErrorCount.Should().Be(1);
@@ -183,7 +183,7 @@ public class ArchivalPhaseTests
             .WithArchivalStatus(ArchivalStatus.Pending)
             .Build();
         dbContext.TrackedReleases.Add(pendingCleanupRelease);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var job = new JobDefinitionBuilder()
             .WithName("test-job")
@@ -196,7 +196,7 @@ public class ArchivalPhaseTests
         await handler.ExecuteAsync(job, dbContext, _torrentClient, CancellationToken.None);
 
         // Assert
-        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedRelease.ArchivalStatus.Should().Be(ArchivalStatus.Pending);
         A.CallTo(() => _torrentClient.SetCategoryAsync(A<string>._, A<string>._, A<CancellationToken>._))
             .MustNotHaveHappened();
@@ -214,7 +214,7 @@ public class ArchivalPhaseTests
             .WithArchivalStatus(ArchivalStatus.Pending)
             .Build();
         dbContext.TrackedReleases.Add(release);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var job = new JobDefinitionBuilder()
             .WithName("test-job")
@@ -254,7 +254,7 @@ public class ArchivalPhaseTests
             .WithArchivalStatus(ArchivalStatus.Completed)
             .Build();
         dbContext.TrackedReleases.AddRange(pendingArchival, completedArchival);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var job = new JobDefinitionBuilder()
             .WithName("test-job")
@@ -285,7 +285,7 @@ public class ArchivalPhaseTests
             .WithArchivalStatus(ArchivalStatus.Pending)
             .Build();
         dbContext.TrackedReleases.Add(release);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var job = new JobDefinitionBuilder()
             .WithName("test-job")
@@ -298,7 +298,7 @@ public class ArchivalPhaseTests
         await handler.ExecuteAsync(job, dbContext, _torrentClient, CancellationToken.None);
 
         // Assert
-        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedRelease.ArchivalStatus.Should().Be(ArchivalStatus.Completed);
 
         A.CallTo(() => _torrentClient.EnsureCategoryExistsAsync(A<string>._, A<CancellationToken>._))
@@ -321,7 +321,7 @@ public class ArchivalPhaseTests
                 .Build()
         ).ToList();
         dbContext.TrackedReleases.AddRange(releases);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var job = new JobDefinitionBuilder()
             .WithName("test-job")
@@ -334,7 +334,7 @@ public class ArchivalPhaseTests
         await handler.ExecuteAsync(job, dbContext, _torrentClient, CancellationToken.None);
 
         // Assert
-        var updatedReleases = await dbContext.TrackedReleases.ToListAsync();
+        var updatedReleases = await dbContext.TrackedReleases.ToListAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedReleases.Should().AllSatisfy(r => r.ArchivalStatus.Should().Be(ArchivalStatus.Completed));
 
         A.CallTo(() => _torrentClient.SetCategoryAsync(A<string>._, "completed", A<CancellationToken>._))

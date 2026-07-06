@@ -1,4 +1,5 @@
 using Harrbor.Abstractions.Clients;
+using Harrbor.Abstractions.Clients.Models;
 using Microsoft.EntityFrameworkCore;
 using Harrbor.Configuration;
 using Harrbor.Data;
@@ -44,7 +45,28 @@ public class DownloadPhaseHandler : IDownloadPhaseHandler
 
         foreach (var release in pendingDownloads)
         {
-            var torrent = await torrentClient.GetTorrentAsync(release.DownloadId, cancellationToken);
+            TorrentSnapshot? torrent;
+            try
+            {
+                torrent = await torrentClient.GetTorrentAsync(release.DownloadId, cancellationToken);
+            }
+            catch (HttpRequestException ex)
+            {
+                // Isolate per-release qBittorrent failures: a transient error for one torrent
+                // must not abort the phase (or the rest of the reconciliation cycle). The
+                // release stays Pending and is retried on the next cycle. Only qBittorrent
+                // transport/API failures (HttpRequestException, incl. QBittorrentClientRequestException)
+                // are absorbed here; unexpected exceptions propagate so real bugs surface.
+                // Record the error for visibility, but do not touch ErrorCount - that budgets
+                // transfer-phase retries and must not be consumed by a download-query hiccup.
+                release.LastError = ex.Message;
+                release.LastErrorAtUtc = DateTime.UtcNow;
+
+                _logger.LogWarning(
+                    "Job '{JobName}': Failed to query qBittorrent for '{ReleaseName}' (DownloadId: {DownloadId}): {Error}; skipping until next cycle",
+                    job.Name, release.Name, release.DownloadId, ex.Message);
+                continue;
+            }
 
             if (torrent == null)
             {
@@ -59,6 +81,11 @@ public class DownloadPhaseHandler : IDownloadPhaseHandler
             {
                 release.DownloadStatus = DownloadStatus.Completed;
                 release.DownloadCompletedAtUtc = DateTime.UtcNow;
+
+                // Clear any transient query error recorded while the download was pending so a
+                // stale message does not follow the release into the transfer phase.
+                release.LastError = null;
+                release.LastErrorAtUtc = null;
 
                 // Update the remote path from torrent's actual save path
                 if (!string.IsNullOrEmpty(torrent.ContentPath))

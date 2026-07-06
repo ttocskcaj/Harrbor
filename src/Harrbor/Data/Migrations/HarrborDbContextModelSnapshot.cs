@@ -80,6 +80,9 @@ namespace Harrbor.Data.Migrations
                     b.Property<bool>("Enabled")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("ExtractionEnabled")
+                        .HasColumnType("INTEGER");
+
                     b.Property<TimeSpan>("ImportTimeout")
                         .HasColumnType("TEXT");
 
@@ -175,6 +178,15 @@ namespace Harrbor.Data.Migrations
                     b.Property<int>("ErrorCount")
                         .HasColumnType("INTEGER");
 
+                    b.Property<DateTime?>("ExtractionCompletedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ExtractionStartedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ExtractionStatus")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTime?>("ImportCompletedAtUtc")
                         .HasColumnType("TEXT");
 
@@ -226,6 +238,8 @@ namespace Harrbor.Data.Migrations
                         .IsUnique();
 
                     b.HasIndex("DownloadStatus");
+
+                    b.HasIndex("ExtractionStatus");
 
                     b.HasIndex("ImportStatus");
 

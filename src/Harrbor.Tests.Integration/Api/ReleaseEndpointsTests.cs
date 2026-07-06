@@ -97,6 +97,7 @@ public class ReleaseEndpointsTests : IDisposable
             Release("DL", b => b.WithDownloadStatus(DownloadStatus.Pending)),
             Release("IMP", b => b
                 .WithDownloadStatus(DownloadStatus.Completed).WithTransferStatus(TransferStatus.Completed)
+                .WithExtractionStatus(ExtractionStatus.Completed)
                 .WithImportStatus(ImportStatus.Pending)));
 
         var imports = await _client.GetFromJsonAsync<PagedResponse<ReleaseListItem>>("/api/releases?phase=import", TestJson.Options);
@@ -137,7 +138,7 @@ public class ReleaseEndpointsTests : IDisposable
 
         detail!.CurrentPhase.Should().Be(ReleasePhase.Transfer);
         detail.RemotePath.Should().NotBeNullOrEmpty();
-        detail.Timeline.Should().HaveCount(6);
+        detail.Timeline.Should().HaveCount(7);
         detail.Timeline.Single(e => e.Phase == ReleasePhase.Transfer).State.Should().Be(PhaseTimelineState.Current);
         detail.Transfer.Should().NotBeNull();
         detail.Transfer!.MaxAttempts.Should().Be(3);

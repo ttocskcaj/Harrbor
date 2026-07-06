@@ -75,12 +75,26 @@ public class QBittorrentTorrentClient : ITorrentClient, IDisposable
         }
     }
 
+    private async Task ReauthenticateAsync(CancellationToken cancellationToken)
+    {
+        _isLoggedIn = false;
+        await GetLoggedInClientAsync(cancellationToken);
+    }
+
+    private Task<T> ExecuteWithRetryAsync<T>(Func<Task<T>> operation, CancellationToken cancellationToken)
+        => QBittorrentRetryPolicy.ExecuteAsync(operation, () => ReauthenticateAsync(cancellationToken), _logger);
+
+    private Task ExecuteWithRetryAsync(Func<Task> operation, CancellationToken cancellationToken)
+        => QBittorrentRetryPolicy.ExecuteAsync(operation, () => ReauthenticateAsync(cancellationToken), _logger);
+
     public async Task<IReadOnlyList<TorrentSnapshot>> GetTorrentListAsync(CancellationToken cancellationToken = default)
     {
         var client = await GetLoggedInClientAsync(cancellationToken);
         try
         {
-            var torrents = await client.GetTorrentListAsync(new TorrentListQuery(), cancellationToken);
+            var torrents = await ExecuteWithRetryAsync(
+                () => client.GetTorrentListAsync(new TorrentListQuery(), cancellationToken),
+                cancellationToken);
             return [.. torrents.Select(ToSnapshot)];
         }
         catch (QBittorrentClientRequestException ex)
@@ -115,7 +129,9 @@ public class QBittorrentTorrentClient : ITorrentClient, IDisposable
                 query.Tag = tags[0];
             }
 
-            var torrents = await client.GetTorrentListAsync(query, cancellationToken);
+            var torrents = await ExecuteWithRetryAsync(
+                () => client.GetTorrentListAsync(query, cancellationToken),
+                cancellationToken);
 
             // Multi-tag filtering must be done client-side
             if (tags is { Count: > 1 })
@@ -142,7 +158,9 @@ public class QBittorrentTorrentClient : ITorrentClient, IDisposable
         var client = await GetLoggedInClientAsync(cancellationToken);
         try
         {
-            var torrents = await client.GetTorrentListAsync(new TorrentListQuery { Hashes = [hash] }, cancellationToken);
+            var torrents = await ExecuteWithRetryAsync(
+                () => client.GetTorrentListAsync(new TorrentListQuery { Hashes = [hash] }, cancellationToken),
+                cancellationToken);
             var torrent = torrents.FirstOrDefault();
             return torrent is null ? null : ToSnapshot(torrent);
         }
@@ -161,7 +179,9 @@ public class QBittorrentTorrentClient : ITorrentClient, IDisposable
         var client = await GetLoggedInClientAsync(cancellationToken);
         try
         {
-            await client.DeleteAsync(hash, deleteFiles, cancellationToken);
+            await ExecuteWithRetryAsync(
+                () => client.DeleteAsync(hash, deleteFiles, cancellationToken),
+                cancellationToken);
             _logger.LogInformation("Deleted torrent {Hash} (deleteFiles: {DeleteFiles})", hash, deleteFiles);
         }
         catch (QBittorrentClientRequestException ex)
@@ -179,7 +199,9 @@ public class QBittorrentTorrentClient : ITorrentClient, IDisposable
         var client = await GetLoggedInClientAsync(cancellationToken);
         try
         {
-            await client.SetTorrentCategoryAsync(hash, category, cancellationToken);
+            await ExecuteWithRetryAsync(
+                () => client.SetTorrentCategoryAsync(hash, category, cancellationToken),
+                cancellationToken);
             _logger.LogInformation("Set category for torrent {Hash} to {Category}", hash, category);
         }
         catch (QBittorrentClientRequestException ex)
@@ -201,7 +223,9 @@ public class QBittorrentTorrentClient : ITorrentClient, IDisposable
         var client = await GetLoggedInClientAsync(cancellationToken);
         try
         {
-            var categories = await client.GetCategoriesAsync(cancellationToken);
+            var categories = await ExecuteWithRetryAsync(
+                () => client.GetCategoriesAsync(cancellationToken),
+                cancellationToken);
             return categories.Keys.ToList();
         }
         catch (QBittorrentClientRequestException ex)
@@ -219,12 +243,16 @@ public class QBittorrentTorrentClient : ITorrentClient, IDisposable
         var client = await GetLoggedInClientAsync(cancellationToken);
         try
         {
-            var categories = await client.GetCategoriesAsync(cancellationToken);
+            var categories = await ExecuteWithRetryAsync(
+                () => client.GetCategoriesAsync(cancellationToken),
+                cancellationToken);
 
             if (!categories.ContainsKey(category))
             {
                 _logger.LogInformation("Creating qBittorrent category: {Category}", category);
-                await client.AddCategoryAsync(category, cancellationToken);
+                await ExecuteWithRetryAsync(
+                    () => client.AddCategoryAsync(category, cancellationToken),
+                    cancellationToken);
             }
         }
         catch (QBittorrentClientRequestException ex)

@@ -68,6 +68,7 @@ public static class DashboardEndpoints
                 case ReleasePhase.Discover: counts.Discover++; break;
                 case ReleasePhase.Download: counts.Download++; break;
                 case ReleasePhase.Transfer: counts.Transfer++; break;
+                case ReleasePhase.Extraction: counts.Extraction++; break;
                 case ReleasePhase.Import: counts.Import++; break;
                 case ReleasePhase.Cleanup: counts.Cleanup++; break;
                 case ReleasePhase.Archival: counts.Archival++; break;

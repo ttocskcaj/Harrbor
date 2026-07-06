@@ -41,6 +41,12 @@ public static class ReleaseActions
                 release.ErrorCount = 0;
                 break;
 
+            case ReleasePhase.Extraction:
+                release.ExtractionStatus = ExtractionStatus.Pending;
+                release.ExtractionStartedAtUtc = null;
+                release.ExtractionCompletedAtUtc = null;
+                break;
+
             case ReleasePhase.Import:
                 release.ImportStatus = ImportStatus.Pending;
                 release.ImportCompletedAtUtc = null;
@@ -158,6 +164,7 @@ public static class ReleaseActions
     private static ReleasePhase? DeriveFailedPhase(TrackedRelease release)
     {
         if (release.TransferStatus == TransferStatus.Failed) return ReleasePhase.Transfer;
+        if (release.ExtractionStatus == ExtractionStatus.Failed) return ReleasePhase.Extraction;
         if (release.ImportStatus == ImportStatus.Failed) return ReleasePhase.Import;
         if (release.CleanupStatus == CleanupStatus.Failed) return ReleasePhase.Cleanup;
         if (release.ArchivalStatus == ArchivalStatus.Failed) return ReleasePhase.Archival;

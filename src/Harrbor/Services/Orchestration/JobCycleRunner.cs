@@ -11,7 +11,7 @@ public interface IJobCycleRunner
 }
 
 /// <summary>
-/// Runs one full six-phase reconciliation cycle for a job. Scoped: the scheduler
+/// Runs one full seven-phase reconciliation cycle for a job. Scoped: the scheduler
 /// creates a fresh DI scope per cycle so handlers and the DbContext are per-cycle.
 /// </summary>
 public class JobCycleRunner : IJobCycleRunner
@@ -19,6 +19,7 @@ public class JobCycleRunner : IJobCycleRunner
     private readonly IDiscoveryPhaseHandler _discoveryHandler;
     private readonly IDownloadPhaseHandler _downloadHandler;
     private readonly ITransferPhaseHandler _transferHandler;
+    private readonly IExtractionPhaseHandler _extractionHandler;
     private readonly IImportPhaseHandler _importHandler;
     private readonly ICleanupPhaseHandler _cleanupHandler;
     private readonly IArchivalPhaseHandler _archivalHandler;
@@ -29,6 +30,7 @@ public class JobCycleRunner : IJobCycleRunner
         IDiscoveryPhaseHandler discoveryHandler,
         IDownloadPhaseHandler downloadHandler,
         ITransferPhaseHandler transferHandler,
+        IExtractionPhaseHandler extractionHandler,
         IImportPhaseHandler importHandler,
         ICleanupPhaseHandler cleanupHandler,
         IArchivalPhaseHandler archivalHandler,
@@ -38,6 +40,7 @@ public class JobCycleRunner : IJobCycleRunner
         _discoveryHandler = discoveryHandler;
         _downloadHandler = downloadHandler;
         _transferHandler = transferHandler;
+        _extractionHandler = extractionHandler;
         _importHandler = importHandler;
         _cleanupHandler = cleanupHandler;
         _archivalHandler = archivalHandler;
@@ -58,19 +61,22 @@ public class JobCycleRunner : IJobCycleRunner
         // 3. PROCESS PENDING TRANSFERS - Run rclone transfers
         await _transferHandler.ExecuteAsync(job, _dbContext, cancellationToken);
 
-        // 4. PROCESS PENDING IMPORTS - Check if Sonarr/Radarr has imported
+        // 4. PROCESS PENDING EXTRACTIONS - Unpack archives in staging
+        await _extractionHandler.ExecuteAsync(job, _dbContext, cancellationToken);
+
+        // 5. PROCESS PENDING IMPORTS - Check if Sonarr/Radarr has imported
         await _importHandler.ExecuteAsync(job, _dbContext, cancellationToken);
 
-        // 5. PROCESS PENDING CLEANUP - Delete files from staging
+        // 6. PROCESS PENDING CLEANUP - Delete files from staging
         await _cleanupHandler.ExecuteAsync(job, _dbContext, cancellationToken);
 
-        // 6. PROCESS PENDING ARCHIVAL - Change torrent category
+        // 7. PROCESS PENDING ARCHIVAL - Change torrent category
         await _archivalHandler.ExecuteAsync(job, _dbContext, cancellationToken);
 
         // Log summary of tracked releases for this job
         var summary = await _dbContext.TrackedReleases
             .Where(r => r.JobName == job.Name)
-            .GroupBy(r => new { r.DownloadStatus, r.TransferStatus, r.ImportStatus })
+            .GroupBy(r => new { r.DownloadStatus, r.TransferStatus, r.ExtractionStatus, r.ImportStatus })
             .Select(g => new { g.Key, Count = g.Count() })
             .ToListAsync(cancellationToken);
 
@@ -80,7 +86,7 @@ public class JobCycleRunner : IJobCycleRunner
                 "Job '{JobName}': Tracked releases summary: {Summary}",
                 job.Name,
                 string.Join(", ", summary.Select(s =>
-                    $"[D:{s.Key.DownloadStatus}/T:{s.Key.TransferStatus}/I:{s.Key.ImportStatus}]={s.Count}")));
+                    $"[D:{s.Key.DownloadStatus}/T:{s.Key.TransferStatus}/E:{s.Key.ExtractionStatus}/I:{s.Key.ImportStatus}]={s.Count}")));
         }
 
         _logger.LogDebug("Job '{JobName}': Reconciliation cycle completed", job.Name);

@@ -125,6 +125,7 @@ public static class JobMapping
         job.MaxTransferRetries = request.MaxTransferRetries;
         job.TransferRetryDelay = TimeSpan.FromSeconds(request.TransferRetryDelaySeconds);
         job.CompletedCategory = string.IsNullOrWhiteSpace(request.CompletedCategory) ? null : request.CompletedCategory.Trim();
+        job.ExtractionEnabled = request.ExtractionEnabled;
         job.ImportTimeout = TimeSpan.FromSeconds(request.ImportTimeoutSeconds);
         job.UpdatedAtUtc = nowUtc;
     }
@@ -155,6 +156,7 @@ public static class JobMapping
         MaxTransferRetries = job.MaxTransferRetries,
         TransferRetryDelaySeconds = (int)job.TransferRetryDelay.TotalSeconds,
         CompletedCategory = job.CompletedCategory,
+        ExtractionEnabled = job.ExtractionEnabled,
         ImportTimeoutSeconds = (int)job.ImportTimeout.TotalSeconds,
         CreatedAtUtc = job.CreatedAtUtc,
         UpdatedAtUtc = job.UpdatedAtUtc,

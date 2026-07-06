@@ -58,7 +58,7 @@ public class CleanupPhaseTests : IDisposable
             .WithStagingPath(stagingPath)
             .Build();
         dbContext.TrackedReleases.Add(release);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var job = new JobDefinitionBuilder().WithName("test-job").Build();
         var handler = CreateHandler();
@@ -67,7 +67,7 @@ public class CleanupPhaseTests : IDisposable
         await handler.ExecuteAsync(job, dbContext, CancellationToken.None);
 
         // Assert
-        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedRelease.CleanupStatus.Should().Be(CleanupStatus.Completed);
         updatedRelease.CleanupCompletedAtUtc.Should().NotBeNull();
         Directory.Exists(releaseDir).Should().BeFalse();
@@ -91,7 +91,7 @@ public class CleanupPhaseTests : IDisposable
             .WithStagingPath(stagingPath)
             .Build();
         dbContext.TrackedReleases.Add(release);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var job = new JobDefinitionBuilder().WithName("test-job").Build();
         var handler = CreateHandler();
@@ -100,7 +100,7 @@ public class CleanupPhaseTests : IDisposable
         await handler.ExecuteAsync(job, dbContext, CancellationToken.None);
 
         // Assert
-        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedRelease.CleanupStatus.Should().Be(CleanupStatus.Completed);
         File.Exists(releaseFile).Should().BeFalse();
     }
@@ -121,7 +121,7 @@ public class CleanupPhaseTests : IDisposable
             .WithStagingPath(stagingPath)
             .Build();
         dbContext.TrackedReleases.Add(release);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var job = new JobDefinitionBuilder().WithName("test-job").Build();
         var handler = CreateHandler();
@@ -130,7 +130,7 @@ public class CleanupPhaseTests : IDisposable
         await handler.ExecuteAsync(job, dbContext, CancellationToken.None);
 
         // Assert
-        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedRelease.CleanupStatus.Should().Be(CleanupStatus.Completed);
         updatedRelease.CleanupCompletedAtUtc.Should().NotBeNull();
     }
@@ -147,7 +147,7 @@ public class CleanupPhaseTests : IDisposable
             .WithCleanupStatus(CleanupStatus.Pending)
             .Build();
         dbContext.TrackedReleases.Add(pendingImportRelease);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var job = new JobDefinitionBuilder().WithName("test-job").Build();
         var handler = CreateHandler();
@@ -156,7 +156,7 @@ public class CleanupPhaseTests : IDisposable
         await handler.ExecuteAsync(job, dbContext, CancellationToken.None);
 
         // Assert
-        var updatedRelease = await dbContext.TrackedReleases.FirstAsync();
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedRelease.CleanupStatus.Should().Be(CleanupStatus.Pending);
     }
 
@@ -181,7 +181,7 @@ public class CleanupPhaseTests : IDisposable
             .WithStagingPath(stagingPath)
             .Build();
         dbContext.TrackedReleases.Add(release);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var job = new JobDefinitionBuilder().WithName("test-job").Build();
         var handler = CreateHandler();
@@ -215,7 +215,7 @@ public class CleanupPhaseTests : IDisposable
             .WithCleanupStatus(CleanupStatus.Completed)
             .Build();
         dbContext.TrackedReleases.AddRange(pendingCleanup, completedCleanup);
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var job = new JobDefinitionBuilder().WithName("test-job").Build();
         var handler = CreateHandler();
@@ -224,7 +224,7 @@ public class CleanupPhaseTests : IDisposable
         await handler.ExecuteAsync(job, dbContext, CancellationToken.None);
 
         // Assert
-        var releases = await dbContext.TrackedReleases.ToListAsync();
+        var releases = await dbContext.TrackedReleases.ToListAsync(cancellationToken: TestContext.Current.CancellationToken);
         releases.First(r => r.DownloadId == "PENDING1").CleanupStatus.Should().Be(CleanupStatus.Completed);
         releases.First(r => r.DownloadId == "COMPLETED1").CleanupCompletedAtUtc.Should().BeNull();
     }

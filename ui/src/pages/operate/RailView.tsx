@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, useState } from 'react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { FlowRail, type FlowRailPhase } from '@/components/ui/FlowRail'
@@ -30,6 +31,32 @@ export function RailView({ dashboard, releases, activeTotal, selectedPhase, onSe
   const drillHue = selectedPhase ? PHASES[selectedPhase].c : 'var(--border-subtle)'
   const panelBorder = selectedPhase ? `color-mix(in oklab, ${drillHue}, transparent 50%)` : 'var(--border-subtle)'
 
+  // The FlowRail lays its nodes out on a CSS grid with auto-width columns, so
+  // node centres are not evenly spaced — a formula can't predict them. Measure
+  // the selected node's real position and point the drawer caret at it.
+  const railRef = useRef<HTMLDivElement>(null)
+  const drawerRef = useRef<HTMLDivElement>(null)
+  const [caretLeft, setCaretLeft] = useState<number | null>(null)
+
+  useLayoutEffect(() => {
+    if (!selectedPhase) { setCaretLeft(null); return }
+    const measure = () => {
+      const rail = railRef.current
+      const drawer = drawerRef.current
+      if (!rail || !drawer) return
+      const nodes = rail.querySelectorAll<HTMLElement>('button[title]')
+      const node = nodes[PHASE_ORDER.indexOf(selectedPhase)]
+      if (!node) return
+      const nb = node.getBoundingClientRect()
+      const db = drawer.getBoundingClientRect()
+      setCaretLeft(nb.left + nb.width / 2 - db.left)
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    if (railRef.current) ro.observe(railRef.current)
+    return () => ro.disconnect()
+  }, [selectedPhase])
+
   const drillReleases = selectedPhase
     ? releases
         .filter((r) => r.currentPhase === selectedPhase)
@@ -52,19 +79,21 @@ export function RailView({ dashboard, releases, activeTotal, selectedPhase, onSe
           <div style={{ font: 'var(--type-card)', color: 'var(--text-heading)', marginTop: '6px' }}>Current releases</div>
           <div style={{ font: 'var(--text-sm) var(--font-sans)', color: 'var(--text-muted)', marginTop: '3px' }}>Tap a phase to inspect its manifest</div>
         </div>
-        <div style={{ padding: '14px 14px 18px' }}>
+        <div ref={railRef} style={{ padding: '14px 14px 18px' }}>
           <FlowRail phases={railPhases} bloom="transfer" activePhase={selectedPhase} onSelect={onSelectPhase} />
         </div>
 
         {selectedPhase && (
-          <div style={{ position: 'relative', background: 'var(--surface-inset)', borderTop: `2px solid ${drillHue}` }}>
+          <div ref={drawerRef} style={{ position: 'relative', background: 'var(--surface-inset)', borderTop: `2px solid ${drillHue}` }}>
             {/* phase-hued caret tying the drawer up to the selected node */}
-            <svg width="22" height="10" viewBox="0 0 22 10" style={{
-              position: 'absolute', left: connectorLeft(selectedPhase), top: 0,
-              transform: 'translate(-50%,-100%)', overflow: 'visible', pointerEvents: 'none',
-            }}>
-              <path d="M0 10 L11 0 L22 10 Z" fill={drillHue} />
-            </svg>
+            {caretLeft != null && (
+              <svg width="22" height="10" viewBox="0 0 22 10" style={{
+                position: 'absolute', left: caretLeft, top: 0,
+                transform: 'translate(-50%,-100%)', overflow: 'visible', pointerEvents: 'none',
+              }}>
+                <path d="M0 10 L11 0 L22 10 Z" fill={drillHue} />
+              </svg>
+            )}
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '13px 16px 11px' }}>
               <PhaseChip phase={selectedPhase} active />
@@ -141,11 +170,6 @@ function buildRailPhases(dashboard: DashboardResponse, releases: ReleaseListItem
       stuckCount: s.stuck || undefined,
     }
   })
-}
-
-function connectorLeft(phase: Phase): string {
-  const frac = ((PHASE_ORDER.indexOf(phase) + 0.5) / 6).toFixed(4)
-  return `calc(24px + ${frac} * (100% - 48px))`
 }
 
 function toAttention(a: AttentionItemData) {

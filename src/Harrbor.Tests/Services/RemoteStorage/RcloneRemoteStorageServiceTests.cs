@@ -197,4 +197,39 @@ public class RcloneRemoteStorageServiceTests
         // Assert
         result.Should().Be(expected);
     }
+
+    [Theory]
+    [InlineData("Kubo.mkv\n", true)]
+    [InlineData("file1.rar\nfile1.r00\n", true)]
+    [InlineData("", false)]
+    public void InterpretLsfExistsResult_ExitZero_ExistsWhenOutputNonEmpty(string output, bool expected)
+    {
+        RcloneRemoteStorageService.InterpretLsfExistsResult(0, output, "").Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(3)] // directory not found
+    [InlineData(4)] // file not found
+    public void InterpretLsfExistsResult_NotFoundExitCodes_ReturnsFalse(int exitCode)
+    {
+        RcloneRemoteStorageService.InterpretLsfExistsResult(
+                exitCode, "", "NOTICE: Failed to lsf with 2 errors: last error was: error in ListJSON: directory not found")
+            .Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(1)] // e.g. couldn't connect SSH: connection refused
+    [InlineData(5)] // temporary error
+    [InlineData(7)] // fatal error (auth etc.)
+    public void InterpretLsfExistsResult_OtherFailures_ThrowsUnavailable(int exitCode)
+    {
+        var act = () => RcloneRemoteStorageService.InterpretLsfExistsResult(
+            exitCode, "",
+            "CRITICAL: Failed to create file system for \":sftp,host=h,user=u,pass=secret:/x\": NewFs: couldn't connect SSH: dial tcp 1.2.3.4:22: connect: connection refused\n");
+
+        act.Should().Throw<RemoteStorageUnavailableException>()
+            .Where(e => e.Message.Contains($"exit code {exitCode}")
+                && e.Message.Contains("connection refused")
+                && !e.Message.Contains("secret"));
+    }
 }

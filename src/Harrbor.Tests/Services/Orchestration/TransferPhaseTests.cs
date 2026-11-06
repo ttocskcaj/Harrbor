@@ -302,4 +302,83 @@ public class TransferPhaseTests
             A<string>._, A<string>._, A<CancellationToken>._))
             .MustNotHaveHappened();
     }
+
+    private static TrackedRelease BuildRetryableRelease(DateTime lastErrorAtUtc) =>
+        new TrackedReleaseBuilder()
+            .WithDownloadId("FAILED1")
+            .WithJobName("test-job")
+            .WithDownloadStatus(DownloadStatus.Completed)
+            .WithTransferStatus(TransferStatus.Failed)
+            .WithErrorCount(1)
+            .WithLastError("Previous failure")
+            .WithLastErrorAtUtc(lastErrorAtUtc)
+            .WithRemotePath("/downloads/release1")
+            .WithStagingPath("/staging")
+            .Build();
+
+    [Fact]
+    public async Task TransferRelease_RetryAndRemoteUnreachable_KeepsRetryingWithoutBurningAttempt()
+    {
+        // Arrange - existence check can't reach the seedbox (e.g. SSH connection refused)
+        var errorTime = DateTime.UtcNow.AddMinutes(-10);
+        using var dbContext = TestDbContextFactory.Create();
+        dbContext.TrackedReleases.Add(BuildRetryableRelease(errorTime));
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        A.CallTo(() => _remoteStorageService.ExistsAsync(A<string>._, A<CancellationToken>._))
+            .Throws(new RemoteStorageUnavailableException("connection refused"));
+
+        var job = new JobDefinitionBuilder()
+            .WithName("test-job")
+            .WithMaxTransferRetries(3)
+            .WithTransferRetryDelay(TimeSpan.FromMinutes(5))
+            .Build();
+
+        var handler = CreateHandler();
+
+        // Act
+        await handler.ExecuteAsync(job, dbContext, _remoteStorageService, CancellationToken.None);
+
+        // Assert - still a normal retryable failure, not permanently failed
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
+        updatedRelease.TransferStatus.Should().Be(TransferStatus.Failed);
+        updatedRelease.ErrorCount.Should().Be(1);
+        updatedRelease.LastError.Should().Be("connection refused");
+        updatedRelease.LastErrorAtUtc.Should().BeAfter(errorTime);
+        A.CallTo(() => _remoteStorageService.TransferAsync(
+            A<string>._, A<string>._, A<CancellationToken>._))
+            .MustNotHaveHappened();
+    }
+
+    [Fact]
+    public async Task TransferRelease_RetryAndRemoteGone_MarksPermanentlyFailed()
+    {
+        // Arrange
+        using var dbContext = TestDbContextFactory.Create();
+        dbContext.TrackedReleases.Add(BuildRetryableRelease(DateTime.UtcNow.AddMinutes(-10)));
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        A.CallTo(() => _remoteStorageService.ExistsAsync(A<string>._, A<CancellationToken>._))
+            .Returns(false);
+
+        var job = new JobDefinitionBuilder()
+            .WithName("test-job")
+            .WithMaxTransferRetries(3)
+            .WithTransferRetryDelay(TimeSpan.FromMinutes(5))
+            .Build();
+
+        var handler = CreateHandler();
+
+        // Act
+        await handler.ExecuteAsync(job, dbContext, _remoteStorageService, CancellationToken.None);
+
+        // Assert
+        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
+        updatedRelease.TransferStatus.Should().Be(TransferStatus.Failed);
+        updatedRelease.ErrorCount.Should().Be(3);
+        updatedRelease.LastError.Should().Be("Remote source no longer exists");
+        A.CallTo(() => _remoteStorageService.TransferAsync(
+            A<string>._, A<string>._, A<CancellationToken>._))
+            .MustNotHaveHappened();
+    }
 }

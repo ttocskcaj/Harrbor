@@ -105,7 +105,26 @@ public class TransferPhaseHandler : ITransferPhaseHandler
         // For retries, check if the remote file still exists
         if (isRetry)
         {
-            var remoteExists = await remoteStorageService.ExistsAsync(release.RemotePath, cancellationToken);
+            bool remoteExists;
+            try
+            {
+                remoteExists = await remoteStorageService.ExistsAsync(release.RemotePath, cancellationToken);
+            }
+            catch (RemoteStorageUnavailableException ex)
+            {
+                // Couldn't reach the remote, so we don't know whether the source is gone.
+                // Don't burn a retry attempt or fail permanently - back off and check again
+                // after the retry delay.
+                release.LastError = ex.Message;
+                release.LastErrorAtUtc = DateTime.UtcNow;
+                await dbContext.SaveChangesAsync(cancellationToken);
+
+                _logger.LogWarning(
+                    "Job '{JobName}': Could not verify remote source for '{ReleaseName}' at {RemotePath}, will retry after {RetryDelay}: {Error}",
+                    job.Name, release.Name, release.RemotePath, job.TransferRetryDelay, ex.Message);
+                return;
+            }
+
             if (!remoteExists)
             {
                 // Source file is gone - mark as permanently failed

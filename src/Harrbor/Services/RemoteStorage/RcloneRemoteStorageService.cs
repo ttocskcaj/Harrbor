@@ -254,13 +254,40 @@ public partial class RcloneRemoteStorageService : IRemoteStorageService
         };
 
         process.Start();
-        var output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
         await process.WaitForExitAsync(cancellationToken);
+        var output = await outputTask;
+        var error = await errorTask;
 
-        // If the path exists (file or directory with contents), lsf will return something
-        // If it's a file, lsf on the exact path returns the filename
-        // If it doesn't exist, exit code will be non-zero or output will be empty
-        return process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output);
+        return InterpretLsfExistsResult(process.ExitCode, output, error);
+    }
+
+    // rclone exit codes: https://rclone.org/docs/#exit-code
+    private const int RcloneExitDirectoryNotFound = 3;
+    private const int RcloneExitFileNotFound = 4;
+
+    /// <summary>
+    /// Interprets the result of <c>rclone lsf &lt;path&gt;</c> as an existence check.
+    /// Only rclone's explicit "not found" exit codes mean the path is gone; any other failure
+    /// (connection refused, auth error, timeout) means existence is unknown and throws.
+    /// </summary>
+    internal static bool InterpretLsfExistsResult(int exitCode, string output, string error)
+    {
+        // If it's a file, lsf on the exact path returns the filename;
+        // a directory with contents lists its entries.
+        if (exitCode == 0)
+            return !string.IsNullOrWhiteSpace(output);
+
+        if (exitCode is RcloneExitDirectoryNotFound or RcloneExitFileNotFound)
+            return false;
+
+        var lastErrorLine = error
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .LastOrDefault() ?? "no error output";
+
+        throw new RemoteStorageUnavailableException(
+            $"Could not check remote path (rclone exit code {exitCode}): {RedactSensitiveArgs(lastErrorLine)}");
     }
 
     internal static long ParseBytesTransferred(List<string> lines)

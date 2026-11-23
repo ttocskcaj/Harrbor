@@ -148,8 +148,9 @@ public class TransferPhaseHandler : ITransferPhaseHandler
         release.TransferStartedAtUtc = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        // Destination is a subdirectory matching the torrent name (consistent with cleanup logic)
-        var destinationPath = Path.Combine(release.StagingPath, Path.GetFileName(release.RemotePath));
+        // Destination is named after the torrent. New releases go to the hidden holding directory and are
+        // published to the final staging path (which Sonarr/Radarr watches) only once post-processing is done.
+        var destinationPath = release.UsesHoldingPath ? release.GetHoldingItemPath() : release.GetFinalItemPath();
 
         _logger.LogInformation(
             "Job '{JobName}': Starting transfer for '{ReleaseName}' from {RemotePath} to {DestinationPath}{AttemptInfo}",

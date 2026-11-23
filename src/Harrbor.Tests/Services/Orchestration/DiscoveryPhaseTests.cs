@@ -73,6 +73,8 @@ public class DiscoveryPhaseTests
             r.JobName.Should().Be("test-job");
             r.DownloadStatus.Should().Be(DownloadStatus.Pending);
             r.TransferStatus.Should().Be(TransferStatus.Pending);
+            r.UsesHoldingPath.Should().BeTrue();
+            r.ConversionStatus.Should().Be(ConversionStatus.Pending);
             r.ImportStatus.Should().Be(ImportStatus.Pending);
         });
     }

@@ -9,11 +9,13 @@ Harrbor is a media orchestration service that coordinates transfers between a re
 - [How It Works](How-It-Works.md) - Understand the orchestration pipeline
 - [Running with Docker](Running-with-Docker.md) - Deploy Harrbor in your homelab
 - [Configuration](Configuration.md) - Configure jobs, services, and transfers
+- [Converters](Converters.md) - Fix media your clients can't play (e.g. Dolby Vision profile 7)
 
 ## Key Features
 
 - **Automated Discovery** - Monitors Sonarr/Radarr queues for new downloads
 - **Smart Transfers** - Uses rclone for efficient SFTP transfers with parallelism
+- **Archive Extraction & Media Conversion** - Unpacks archives and losslessly fixes unplayable formats before the *arr imports
 - **Import Coordination** - Waits for media managers to import before cleanup
 - **Seeding Preservation** - Never breaks torrent seeding on the seedbox
 - **Retry Logic** - Automatic retries with configurable backoff for failed transfers

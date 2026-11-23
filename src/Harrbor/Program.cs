@@ -6,10 +6,15 @@ using Harrbor.Data.Entities;
 using Harrbor.HealthChecks;
 using Harrbor.Services;
 using Harrbor.Services.Clients;
+using Harrbor.Services.Conversion;
 using Harrbor.Services.Extraction;
 using Harrbor.Services.Orchestration;
 using Harrbor.Services.RemoteStorage;
 using Harrbor.Services.Orchestration.Phases;
+
+// CLI mode: `dotnet Harrbor.dll convert <path> --converter <Name> [--dry-run]` (no DB, no jobs)
+if (args.Length > 0 && args[0] == ConversionCli.Verb)
+    return await ConversionCli.RunAsync(args[1..]);
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
@@ -62,6 +67,7 @@ try
     builder.Services.AddScoped<IRemoteStorageService, RcloneRemoteStorageService>();
     builder.Services.AddScoped<IArchiveExtractionService, ArchiveExtractionService>();
     builder.Services.AddScoped<IMediaServiceResolver, MediaServiceResolver>();
+    builder.Services.AddMediaConversion(builder.Configuration);
 
     builder.Services.AddHttpClient<ISonarrClient, SonarrClient>()
         .AddStandardResilienceHandler();
@@ -77,6 +83,8 @@ try
     builder.Services.AddScoped<IDownloadPhaseHandler, DownloadPhaseHandler>();
     builder.Services.AddScoped<ITransferPhaseHandler, TransferPhaseHandler>();
     builder.Services.AddScoped<IExtractionPhaseHandler, ExtractionPhaseHandler>();
+    builder.Services.AddScoped<IConversionPhaseHandler, ConversionPhaseHandler>();
+    builder.Services.AddScoped<IPublishPhaseHandler, PublishPhaseHandler>();
     builder.Services.AddScoped<IImportPhaseHandler, ImportPhaseHandler>();
     builder.Services.AddScoped<ICleanupPhaseHandler, CleanupPhaseHandler>();
     builder.Services.AddScoped<IArchivalPhaseHandler, ArchivalPhaseHandler>();
@@ -138,6 +146,53 @@ try
                 "Reset {Count} stuck extractions to Pending state",
                 stuckExtractions.Count);
         }
+
+        // Reset any stuck InProgress conversions. The original file is only replaced by an atomic rename
+        // after verification, so redoing is safe; leftover temp/scratch files are removed below.
+        var stuckConversions = await db.TrackedReleases
+            .Where(r => r.ConversionStatus == ConversionStatus.InProgress)
+            .ToListAsync();
+
+        if (stuckConversions.Count > 0)
+        {
+            foreach (var release in stuckConversions)
+            {
+                release.ConversionStatus = ConversionStatus.Pending;
+                release.ConversionStartedAtUtc = null;
+            }
+            await db.SaveChangesAsync();
+
+            var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+            logger.LogInformation(
+                "Reset {Count} stuck conversions to Pending state",
+                stuckConversions.Count);
+        }
+
+        // Ensure holding dirs exist and remove conversion leftovers from interrupted runs
+        var jobDefinitions = scope.ServiceProvider
+            .GetRequiredService<Microsoft.Extensions.Options.IOptions<JobOptions>>().Value.Definitions;
+        foreach (var stagingPath in jobDefinitions
+            .Where(j => j.Enabled && !string.IsNullOrEmpty(j.StagingPath))
+            .Select(j => j.StagingPath)
+            .Distinct())
+        {
+            var holdingRoot = Path.Combine(stagingPath, TrackedRelease.HoldingDirectoryName);
+            try
+            {
+                Directory.CreateDirectory(holdingRoot);
+                var removed = ConversionArtifacts.CleanupLeftovers(holdingRoot);
+                if (removed > 0)
+                {
+                    scope.ServiceProvider.GetRequiredService<ILogger<Program>>().LogInformation(
+                        "Removed {Count} leftover conversion temp file(s) under {Path}", removed, holdingRoot);
+                }
+            }
+            catch (Exception ex)
+            {
+                scope.ServiceProvider.GetRequiredService<ILogger<Program>>().LogWarning(
+                    ex, "Could not prepare holding directory {Path}", holdingRoot);
+            }
+        }
     }
 
     // Validate external service connections
@@ -165,8 +220,11 @@ try
 catch (Exception ex)
 {
     Log.Fatal(ex, "Application terminated unexpectedly");
+    return 1;
 }
 finally
 {
     Log.CloseAndFlush();
 }
+
+return 0;

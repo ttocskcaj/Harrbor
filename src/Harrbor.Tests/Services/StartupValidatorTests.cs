@@ -3,6 +3,8 @@ using FluentAssertions;
 using Harrbor.Configuration;
 using Harrbor.Services;
 using Harrbor.Services.Clients;
+using Harrbor.Services.Conversion;
+using Harrbor.Services.Processes;
 using Harrbor.Services.RemoteStorage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -20,6 +22,8 @@ public class StartupValidatorTests : IDisposable
     private readonly IOptions<RadarrOptions> _radarrOptions;
     private readonly IOptions<JobOptions> _jobOptions;
     private readonly ILogger<StartupValidator> _logger;
+    private readonly IProcessRunner _processRunner;
+    private readonly IMediaConverter _converter;
     private readonly string _tempDir;
 
     public StartupValidatorTests()
@@ -32,6 +36,12 @@ public class StartupValidatorTests : IDisposable
         _radarrOptions = Options.Create(new RadarrOptions { Enabled = true });
         _jobOptions = Options.Create(new JobOptions { Definitions = [] });
         _logger = A.Fake<ILogger<StartupValidator>>();
+        _processRunner = A.Fake<IProcessRunner>();
+        A.CallTo(() => _processRunner.RunAsync(A<ProcessSpec>._, A<CancellationToken>._))
+            .ReturnsLazily((ProcessSpec spec, CancellationToken _) => new ProcessResult(spec.FileName, 0, "v1", ""));
+        _converter = A.Fake<IMediaConverter>();
+        A.CallTo(() => _converter.Name).Returns("FakeConverter");
+        A.CallTo(() => _converter.RequiredTools).Returns(["ffmpeg", "dovi_tool"]);
         _tempDir = Path.Combine(Path.GetTempPath(), $"harrbor-test-{Guid.NewGuid()}");
         Directory.CreateDirectory(_tempDir);
     }
@@ -57,6 +67,8 @@ public class StartupValidatorTests : IDisposable
             sonarrOptions ?? _sonarrOptions,
             radarrOptions ?? _radarrOptions,
             jobOptions ?? _jobOptions,
+            new ConverterRegistry([_converter]),
+            new ToolChecker(_processRunner, Options.Create(new ConversionOptions())),
             _logger);
     }
 
@@ -415,5 +427,90 @@ public class StartupValidatorTests : IDisposable
 
         // Assert
         await act.Should().NotThrowAsync();
+    }
+
+    private IOptions<JobOptions> JobWithConverters(params string[] converters) =>
+        Options.Create(new JobOptions
+        {
+            Definitions =
+            [
+                new JobDefinition
+                {
+                    Name = "movies",
+                    RemotePath = "/downloads",
+                    StagingPath = _tempDir,
+                    Converters = [.. converters]
+                }
+            ]
+        });
+
+    [Fact]
+    public async Task ValidateAsync_UnknownConverter_Throws()
+    {
+        var validator = CreateValidator(jobOptions: JobWithConverters("NoSuchConverter"));
+
+        var act = () => validator.ValidateAsync(TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*unknown converter 'NoSuchConverter'*FakeConverter*");
+    }
+
+    [Fact]
+    public async Task ValidateAsync_MissingTool_Throws()
+    {
+        A.CallTo(() => _processRunner.RunAsync(
+                A<ProcessSpec>.That.Matches(s => s.FileName == "dovi_tool"), A<CancellationToken>._))
+            .Throws(new System.ComponentModel.Win32Exception("No such file or directory"));
+        var validator = CreateValidator(jobOptions: JobWithConverters("FakeConverter"));
+
+        var act = () => validator.ValidateAsync(TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*dovi_tool*could not be run*");
+    }
+
+    [Fact]
+    public async Task ValidateAsync_ToolExitsNonZero_Throws()
+    {
+        A.CallTo(() => _processRunner.RunAsync(
+                A<ProcessSpec>.That.Matches(s => s.FileName == "ffmpeg"), A<CancellationToken>._))
+            .Returns(new ProcessResult("ffmpeg", 127, "", "not found"));
+        var validator = CreateValidator(jobOptions: JobWithConverters("FakeConverter"));
+
+        var act = () => validator.ValidateAsync(TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*ffmpeg*exited with code 127*");
+    }
+
+    [Fact]
+    public async Task ValidateAsync_KnownConverterWithTools_ChecksEachToolOnce()
+    {
+        A.CallTo(() => _remoteStorageService.TestConnectionAsync(A<CancellationToken>._))
+            .Returns(new RemoteStorageConnectionResult(true));
+        var validator = CreateValidator(jobOptions: JobWithConverters("FakeConverter", "fakeconverter"));
+
+        await validator.ValidateAsync(TestContext.Current.CancellationToken);
+
+        A.CallTo(() => _processRunner.RunAsync(
+                A<ProcessSpec>.That.Matches(s => s.FileName == "ffmpeg" && s.Arguments.SequenceEqual(new[] { "-version" })),
+                A<CancellationToken>._))
+            .MustHaveHappenedOnceExactly();
+        A.CallTo(() => _processRunner.RunAsync(
+                A<ProcessSpec>.That.Matches(s => s.FileName == "dovi_tool" && s.Arguments.SequenceEqual(new[] { "--version" })),
+                A<CancellationToken>._))
+            .MustHaveHappenedOnceExactly();
+    }
+
+    [Fact]
+    public async Task ValidateAsync_NoConvertersConfigured_DoesNotCheckTools()
+    {
+        A.CallTo(() => _remoteStorageService.TestConnectionAsync(A<CancellationToken>._))
+            .Returns(new RemoteStorageConnectionResult(true));
+        var validator = CreateValidator(jobOptions: JobWithConverters());
+
+        await validator.ValidateAsync(TestContext.Current.CancellationToken);
+
+        A.CallTo(() => _processRunner.RunAsync(A<ProcessSpec>._, A<CancellationToken>._)).MustNotHaveHappened();
     }
 }

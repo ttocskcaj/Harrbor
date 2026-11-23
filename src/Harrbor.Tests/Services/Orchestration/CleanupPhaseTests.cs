@@ -228,4 +228,35 @@ public class CleanupPhaseTests : IDisposable
         releases.First(r => r.DownloadId == "PENDING1").CleanupStatus.Should().Be(CleanupStatus.Completed);
         releases.First(r => r.DownloadId == "COMPLETED1").CleanupCompletedAtUtc.Should().BeNull();
     }
+
+    [Fact]
+    public async Task ProcessCleanup_HoldingRelease_DeletesFinalAndLeftoverHoldingItem()
+    {
+        var finalDir = Path.Combine(_tempDir, "Show.S01");
+        var holdingDir = Path.Combine(_tempDir, ".harrbor", "Show.S01");
+        Directory.CreateDirectory(finalDir);
+        Directory.CreateDirectory(holdingDir);
+        File.WriteAllText(Path.Combine(holdingDir, "leftover.mkv"), "x");
+
+        using var dbContext = TestDbContextFactory.Create();
+        dbContext.TrackedReleases.Add(new TrackedReleaseBuilder()
+            .WithDownloadId("HOLD")
+            .WithJobName("test-job")
+            .WithImportStatus(ImportStatus.Completed)
+            .WithCleanupStatus(CleanupStatus.Pending)
+            .WithRemotePath("/downloads/Show.S01")
+            .WithStagingPath(_tempDir)
+            .WithUsesHoldingPath(true)
+            .Build());
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var job = new JobDefinitionBuilder().WithName("test-job").Build();
+        await CreateHandler().ExecuteAsync(job, dbContext, TestContext.Current.CancellationToken);
+
+        (await dbContext.TrackedReleases.SingleAsync(TestContext.Current.CancellationToken))
+            .CleanupStatus.Should().Be(CleanupStatus.Completed);
+        Directory.Exists(finalDir).Should().BeFalse();
+        Directory.Exists(holdingDir).Should().BeFalse();
+        Directory.Exists(Path.Combine(_tempDir, ".harrbor")).Should().BeTrue("the holding root itself is kept");
+    }
 }

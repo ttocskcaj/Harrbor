@@ -35,6 +35,7 @@ public class ImportPhaseHandler : IImportPhaseHandler
             .Where(r => r.JobName == job.Name
                 && r.TransferStatus == TransferStatus.Completed
                 && r.ExtractionStatus == ExtractionStatus.Completed
+                && (!r.UsesHoldingPath || r.PublishedAtUtc != null)
                 && r.ImportStatus == ImportStatus.Pending)
             .ToListAsync(cancellationToken);
 
@@ -77,7 +78,7 @@ public class ImportPhaseHandler : IImportPhaseHandler
             else
             {
                 // Still in queue - check timeout from when the release became importable
-                var importableAtUtc = release.ExtractionCompletedAtUtc ?? release.TransferCompletedAtUtc;
+                var importableAtUtc = release.PublishedAtUtc ?? release.ExtractionCompletedAtUtc ?? release.TransferCompletedAtUtc;
                 if (importableAtUtc.HasValue)
                 {
                     var elapsed = DateTime.UtcNow - importableAtUtc.Value;

@@ -23,6 +23,7 @@ public class HarrborDbContext : DbContext
             entity.HasIndex(e => e.DownloadStatus);
             entity.HasIndex(e => e.TransferStatus);
             entity.HasIndex(e => e.ExtractionStatus);
+            entity.HasIndex(e => e.ConversionStatus);
             entity.HasIndex(e => e.ImportStatus);
             entity.HasIndex(e => e.JobName);
 
@@ -32,6 +33,7 @@ public class HarrborDbContext : DbContext
             entity.Property(e => e.RemotePath).HasMaxLength(1000).IsRequired();
             entity.Property(e => e.StagingPath).HasMaxLength(1000).IsRequired();
             entity.Property(e => e.LastError).HasMaxLength(2000);
+            entity.Property(e => e.ConversionSummary).HasMaxLength(2000);
         });
     }
 }

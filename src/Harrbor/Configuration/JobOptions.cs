@@ -20,6 +20,11 @@ public class JobDefinition
     public int MaxTransferRetries { get; set; } = 3;
     public TimeSpan TransferRetryDelay { get; set; } = TimeSpan.FromMinutes(5);
     public bool ExtractionEnabled { get; set; } = true;
+    /// <summary>
+    /// Names of media converters (see <c>Conversion</c> config section) to run, in order, before publishing.
+    /// Empty means conversion is skipped.
+    /// </summary>
+    public List<string> Converters { get; set; } = [];
     public string? CompletedCategory { get; set; }
     public TimeSpan ImportTimeout { get; set; } = TimeSpan.FromHours(24);
     public bool Enabled { get; set; } = true;

@@ -37,6 +37,17 @@ Harrbor is configured via `appsettings.json`. For local development, use `appset
     "Transfers": 4,
     "Checkers": 8
   },
+  "Conversion": {
+    "DryRun": false,
+    "MinFileSizeBytes": 1073741824,
+    "DurationToleranceSeconds": 1,
+    "Tools": {
+      "ffprobe": "ffprobe",
+      "ffmpeg": "ffmpeg",
+      "mkvmerge": "mkvmerge",
+      "dovi_tool": "dovi_tool"
+    }
+  },
   "Jobs": {
     "Definitions": [
       {
@@ -55,6 +66,7 @@ Harrbor is configured via `appsettings.json`. For local development, use `appset
       },
       {
         "Name": "movies",
+        "Converters": ["DoviP7ToP81"],
         "PollingInterval": "00:01:00",
         "ServiceType": "Radarr",
         "RemotePath": "/downloads/movies",
@@ -110,6 +122,20 @@ Settings for rclone SFTP transfers.
 | `Checkers` | `8` | Concurrent file checkers |
 | `AdditionalFlags` | `[]` | Extra rclone flags |
 
+### Conversion
+
+Settings shared by all [media converters](Converters.md). They only matter for jobs that list `Converters`, and for the `convert` CLI command.
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `DryRun` | `false` | Log what would be converted, without writing anything |
+| `MinFileSizeBytes` | `1073741824` (1 GiB) | Ignore smaller files (samples, extras) |
+| `DurationToleranceSeconds` | `1` | Maximum allowed difference between the source and converted durations |
+| `Tools` | bare names on `PATH` | Map of tool name to executable path: `ffprobe`, `ffmpeg`, `mkvmerge`, `dovi_tool`. The Docker image includes all of them |
+| `Converters.<Name>` | - | Optional settings for one converter. None of the current converters use it |
+
+At startup, Harrbor refuses to start if a job names an unknown converter, or if a tool needed by a configured converter can't run (it runs each one's version command).
+
 ### Jobs
 
 Each job monitors a specific category of downloads.
@@ -128,6 +154,7 @@ Each job monitors a specific category of downloads.
 | `MaxTransferRetries` | `3` | Retry attempts for failed transfers |
 | `TransferRetryDelay` | `00:05:00` | Cooldown between retries |
 | `ExtractionEnabled` | `true` | Unpack zip/rar/7z archives after transfer |
+| `Converters` | `[]` | [Media converters](Converters.md) to run, in order, before publishing (e.g. `["DoviP7ToP81"]`). Empty skips conversion |
 | `ImportTimeout` | `1.00:00:00` | Max time to wait for import |
 | `Enabled` | `true` | Enable/disable this job |
 
@@ -153,3 +180,5 @@ Configure remote path mappings so Sonarr/Radarr can find files in staging:
    - Local Path: Your staging path (e.g., `/staging/tv`)
 
 This tells Sonarr/Radarr to look in staging for completed downloads.
+
+Harrbor works on new releases in the hidden `{StagingPath}/.harrbor/` directory and moves them into `{StagingPath}` only when they are ready (see [How It Works](How-It-Works.md#the-holding-directory)). `.harrbor` must stay on the same filesystem as `StagingPath`, so don't mount it separately.

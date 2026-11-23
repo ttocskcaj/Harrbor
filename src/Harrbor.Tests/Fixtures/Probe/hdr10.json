@@ -1,0 +1,117 @@
+{
+  "streams": [
+    {
+      "index": 0,
+      "codec_name": "hevc",
+      "profile": "Main 10",
+      "codec_type": "video",
+      "width": 3840,
+      "height": 2160,
+      "pix_fmt": "yuv420p10le",
+      "color_space": "bt2020nc",
+      "color_transfer": "smpte2084",
+      "color_primaries": "bt2020",
+      "r_frame_rate": "24000/1001",
+      "avg_frame_rate": "24000/1001",
+      "time_base": "1/1000",
+      "disposition": {
+        "default": 1,
+        "forced": 0,
+        "attached_pic": 0
+      },
+      "tags": {
+        "language": "und",
+        "DURATION": "02:01:00.002000000"
+      },
+      "side_data_list": [
+        {
+          "side_data_type": "Mastering display metadata",
+          "red_x": "35400/50000",
+          "red_y": "14600/50000",
+          "max_luminance": "10000000/10000",
+          "min_luminance": "50/10000"
+        },
+        {
+          "side_data_type": "Content light level metadata",
+          "max_content": 1000,
+          "max_average": 400
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "codec_name": "truehd",
+      "codec_type": "audio",
+      "sample_rate": "48000",
+      "channels": 8,
+      "r_frame_rate": "0/0",
+      "avg_frame_rate": "0/0",
+      "disposition": {
+        "default": 0,
+        "forced": 0,
+        "attached_pic": 0
+      },
+      "tags": {
+        "language": "eng"
+      }
+    },
+    {
+      "index": 2,
+      "codec_name": "ac3",
+      "codec_type": "audio",
+      "sample_rate": "48000",
+      "channels": 8,
+      "r_frame_rate": "0/0",
+      "avg_frame_rate": "0/0",
+      "disposition": {
+        "default": 0,
+        "forced": 0,
+        "attached_pic": 0
+      },
+      "tags": {
+        "language": "eng"
+      }
+    },
+    {
+      "index": 3,
+      "codec_name": "hdmv_pgs_subtitle",
+      "codec_type": "subtitle",
+      "r_frame_rate": "0/0",
+      "avg_frame_rate": "0/0",
+      "disposition": {
+        "default": 0,
+        "forced": 0,
+        "attached_pic": 0
+      },
+      "tags": {
+        "language": "eng"
+      }
+    },
+    {
+      "index": 4,
+      "codec_name": "hdmv_pgs_subtitle",
+      "codec_type": "subtitle",
+      "r_frame_rate": "0/0",
+      "avg_frame_rate": "0/0",
+      "disposition": {
+        "default": 0,
+        "forced": 0,
+        "attached_pic": 0
+      },
+      "tags": {
+        "language": "fre"
+      }
+    }
+  ],
+  "format": {
+    "filename": "movie.mkv",
+    "nb_streams": 5,
+    "format_name": "matroska,webm",
+    "duration": "7260.002000",
+    "size": "60000000000",
+    "tags": {
+      "title": "Example Movie (2023)",
+      "ENCODER": "libebml v1.4.4 + libmatroska v1.7.1"
+    }
+  }
+}

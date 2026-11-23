@@ -78,8 +78,8 @@ public class ExtractionPhaseHandler : IExtractionPhaseHandler
         release.ExtractionStartedAtUtc = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        // Staging item is a subdirectory (or file) matching the torrent name (consistent with transfer/cleanup logic)
-        var stagingItemPath = Path.Combine(release.StagingPath, Path.GetFileName(release.RemotePath));
+        // Holding path for new releases (not yet visible to Sonarr/Radarr), final staging path for legacy ones
+        var stagingItemPath = release.GetWorkingItemPath();
 
         try
         {

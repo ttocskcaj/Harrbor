@@ -381,4 +381,30 @@ public class TransferPhaseTests
             A<string>._, A<string>._, A<CancellationToken>._))
             .MustNotHaveHappened();
     }
+
+    [Theory]
+    [InlineData(true, "/staging/.harrbor/release1")]
+    [InlineData(false, "/staging/release1")]
+    public async Task ProcessTransfers_DestinationDependsOnHoldingPath(bool usesHoldingPath, string expectedDestination)
+    {
+        using var dbContext = TestDbContextFactory.Create();
+        dbContext.TrackedReleases.Add(new TrackedReleaseBuilder()
+            .WithDownloadId("DEST1")
+            .WithJobName("test-job")
+            .WithDownloadStatus(DownloadStatus.Completed)
+            .WithTransferStatus(TransferStatus.Pending)
+            .WithRemotePath("/downloads/release1")
+            .WithStagingPath("/staging")
+            .WithUsesHoldingPath(usesHoldingPath)
+            .Build());
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+        A.CallTo(() => _remoteStorageService.TransferAsync(A<string>._, A<string>._, A<CancellationToken>._))
+            .Returns(new TransferResult(Success: true, BytesTransferred: 1));
+
+        var job = new JobDefinitionBuilder().WithName("test-job").Build();
+        await CreateHandler().ExecuteAsync(job, dbContext, _remoteStorageService, TestContext.Current.CancellationToken);
+
+        A.CallTo(() => _remoteStorageService.TransferAsync("/downloads/release1", expectedDestination, A<CancellationToken>._))
+            .MustHaveHappenedOnceExactly();
+    }
 }

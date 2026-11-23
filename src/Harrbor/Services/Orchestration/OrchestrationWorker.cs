@@ -82,6 +82,8 @@ public class OrchestrationWorker : BackgroundService
         var downloadHandler = scope.ServiceProvider.GetRequiredService<IDownloadPhaseHandler>();
         var transferHandler = scope.ServiceProvider.GetRequiredService<ITransferPhaseHandler>();
         var extractionHandler = scope.ServiceProvider.GetRequiredService<IExtractionPhaseHandler>();
+        var conversionHandler = scope.ServiceProvider.GetRequiredService<IConversionPhaseHandler>();
+        var publishHandler = scope.ServiceProvider.GetRequiredService<IPublishPhaseHandler>();
         var importHandler = scope.ServiceProvider.GetRequiredService<IImportPhaseHandler>();
         var cleanupHandler = scope.ServiceProvider.GetRequiredService<ICleanupPhaseHandler>();
         var archivalHandler = scope.ServiceProvider.GetRequiredService<IArchivalPhaseHandler>();
@@ -98,19 +100,25 @@ public class OrchestrationWorker : BackgroundService
         // 4. PROCESS PENDING EXTRACTIONS - Unpack archives in staging
         await extractionHandler.ExecuteAsync(job, dbContext, cancellationToken);
 
-        // 5. PROCESS PENDING IMPORTS - Check if Sonarr/Radarr has imported
+        // 5. PROCESS PENDING CONVERSIONS - Rewrite media files clients can't play (e.g. DV P7 -> 8.1)
+        await conversionHandler.ExecuteAsync(job, dbContext, cancellationToken);
+
+        // 6. PUBLISH - Move finished releases from the holding dir to where Sonarr/Radarr looks
+        await publishHandler.ExecuteAsync(job, dbContext, cancellationToken);
+
+        // 7. PROCESS PENDING IMPORTS - Check if Sonarr/Radarr has imported
         await importHandler.ExecuteAsync(job, dbContext, cancellationToken);
 
-        // 6. PROCESS PENDING CLEANUP - Delete files from staging
+        // 8. PROCESS PENDING CLEANUP - Delete files from staging
         await cleanupHandler.ExecuteAsync(job, dbContext, cancellationToken);
 
-        // 7. PROCESS PENDING ARCHIVAL - Change torrent category
+        // 9. PROCESS PENDING ARCHIVAL - Change torrent category
         await archivalHandler.ExecuteAsync(job, dbContext, cancellationToken);
 
         // Log summary of tracked releases for this job
         var summary = await dbContext.TrackedReleases
             .Where(r => r.JobName == job.Name)
-            .GroupBy(r => new { r.DownloadStatus, r.TransferStatus, r.ExtractionStatus, r.ImportStatus })
+            .GroupBy(r => new { r.DownloadStatus, r.TransferStatus, r.ExtractionStatus, r.ConversionStatus, Published = r.PublishedAtUtc != null || !r.UsesHoldingPath, r.ImportStatus })
             .Select(g => new { g.Key, Count = g.Count() })
             .ToListAsync(cancellationToken);
 
@@ -120,7 +128,7 @@ public class OrchestrationWorker : BackgroundService
                 "Job '{JobName}': Tracked releases summary: {Summary}",
                 job.Name,
                 string.Join(", ", summary.Select(s =>
-                    $"[D:{s.Key.DownloadStatus}/T:{s.Key.TransferStatus}/E:{s.Key.ExtractionStatus}/I:{s.Key.ImportStatus}]={s.Count}")));
+                    $"[D:{s.Key.DownloadStatus}/T:{s.Key.TransferStatus}/E:{s.Key.ExtractionStatus}/C:{s.Key.ConversionStatus}/P:{(s.Key.Published ? "Yes" : "No")}/I:{s.Key.ImportStatus}]={s.Count}")));
         }
 
         _logger.LogDebug("Job '{JobName}': Reconciliation cycle completed", job.Name);

@@ -35,8 +35,30 @@ LABEL org.opencontainers.image.title="Harrbor" \
 
 WORKDIR /app
 
+# dovi_tool (Dolby Vision RPU tool used by the DoviP7ToP81 converter): pinned static musl build
+# from https://github.com/quietvoid/dovi_tool/releases, verified by sha256.
+ARG TARGETARCH
+ARG DOVI_TOOL_VERSION=2.3.4
+ARG DOVI_TOOL_SHA256_AMD64=1844258e13c26607b32224bf1fa82b595d3b35949f5467405fda560daad32b3f
+ARG DOVI_TOOL_SHA256_ARM64=b4f22a7db56954efe4ed8d02276d0f991799e84602f3584711be6c9df950cb15
+RUN set -eu; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) triple=x86_64-unknown-linux-musl;  sha="${DOVI_TOOL_SHA256_AMD64}" ;; \
+      arm64) triple=aarch64-unknown-linux-musl; sha="${DOVI_TOOL_SHA256_ARM64}" ;; \
+      *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    asset="dovi_tool-${DOVI_TOOL_VERSION}-${triple}.tar.gz"; \
+    wget -q -O "/tmp/${asset}" "https://github.com/quietvoid/dovi_tool/releases/download/${DOVI_TOOL_VERSION}/${asset}"; \
+    echo "${sha}  /tmp/${asset}" | sha256sum -c -; \
+    mkdir /tmp/dovi_tool; \
+    tar -xzf "/tmp/${asset}" -C /tmp/dovi_tool; \
+    install -m 755 /tmp/dovi_tool/dovi_tool /usr/local/bin/dovi_tool; \
+    rm -rf "/tmp/${asset}" /tmp/dovi_tool; \
+    dovi_tool --version
+
 # Install dependencies and configure user in single layer
-RUN apk add --no-cache rclone shadow su-exec tzdata \
+# (ffmpeg/ffprobe + mkvtoolnix are used by media converters)
+RUN apk add --no-cache rclone shadow su-exec tzdata ffmpeg mkvtoolnix \
     && addgroup -g 1000 harrbor \
     && adduser -u 1000 -G harrbor -h /home/harrbor -s /bin/sh -D harrbor \
     # Create .ssh directory for mounted SSH keys

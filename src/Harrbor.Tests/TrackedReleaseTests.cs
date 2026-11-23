@@ -101,4 +101,39 @@ public class TrackedReleaseTests
         Assert.Equal(1, (int)ArchivalStatus.Completed);
         Assert.Equal(2, (int)ArchivalStatus.Failed);
     }
+
+    [Fact]
+    public void TrackedRelease_NewRow_DefaultsToPendingConversionWithoutHoldingPath()
+    {
+        var release = new TrackedRelease();
+
+        Assert.Equal(ConversionStatus.Pending, release.ConversionStatus);
+        Assert.False(release.UsesHoldingPath);
+    }
+
+    [Fact]
+    public void PathHelpers_HoldingRelease_UsesHoldingPathUntilPublished()
+    {
+        var release = new TrackedRelease
+        {
+            RemotePath = "/downloads/tv/Show.S01E01",
+            StagingPath = "/staging/tv",
+            UsesHoldingPath = true
+        };
+
+        Assert.Equal("/staging/tv/Show.S01E01", release.GetFinalItemPath());
+        Assert.Equal("/staging/tv/.harrbor/Show.S01E01", release.GetHoldingItemPath());
+        Assert.Equal("/staging/tv/.harrbor/Show.S01E01", release.GetWorkingItemPath());
+
+        release.PublishedAtUtc = DateTime.UtcNow;
+        Assert.Equal("/staging/tv/Show.S01E01", release.GetWorkingItemPath());
+    }
+
+    [Fact]
+    public void PathHelpers_LegacyRelease_AlwaysUsesFinalPath()
+    {
+        var release = new TrackedRelease { RemotePath = "/downloads/Movie.mkv", StagingPath = "/staging" };
+
+        Assert.Equal("/staging/Movie.mkv", release.GetWorkingItemPath());
+    }
 }

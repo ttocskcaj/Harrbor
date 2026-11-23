@@ -15,7 +15,7 @@ namespace Harrbor.Data.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "10.0.9");
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.14");
 
             modelBuilder.Entity("Harrbor.Data.Entities.TrackedRelease", b =>
                 {
@@ -34,6 +34,19 @@ namespace Harrbor.Data.Migrations
 
                     b.Property<int>("CleanupStatus")
                         .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("ConversionCompletedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ConversionStartedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ConversionStatus")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ConversionSummary")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("TEXT");
@@ -61,6 +74,9 @@ namespace Harrbor.Data.Migrations
                     b.Property<int>("ExtractionStatus")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("FilesConverted")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTime?>("ImportCompletedAtUtc")
                         .HasColumnType("TEXT");
 
@@ -84,6 +100,9 @@ namespace Harrbor.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime?>("PublishedAtUtc")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("RemotePath")
                         .IsRequired()
                         .HasMaxLength(1000)
@@ -103,7 +122,12 @@ namespace Harrbor.Data.Migrations
                     b.Property<int>("TransferStatus")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("UsesHoldingPath")
+                        .HasColumnType("INTEGER");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("ConversionStatus");
 
                     b.HasIndex("DownloadId")
                         .IsUnique();

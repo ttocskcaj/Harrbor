@@ -51,6 +51,18 @@ public class TrackedRelease
     public ExtractionStatus ExtractionStatus { get; set; } = ExtractionStatus.Pending;
 
     /// <summary>
+    /// Current status of the media conversion phase.
+    /// </summary>
+    public ConversionStatus ConversionStatus { get; set; } = ConversionStatus.Pending;
+
+    /// <summary>
+    /// True when the release is transferred into the hidden holding directory
+    /// (<c>{StagingPath}/.harrbor/{name}</c>) and published to the final staging path only after
+    /// all post-transfer phases finish. False for rows created before the holding directory existed.
+    /// </summary>
+    public bool UsesHoldingPath { get; set; }
+
+    /// <summary>
     /// Current status of the import phase.
     /// </summary>
     public ImportStatus ImportStatus { get; set; } = ImportStatus.Pending;
@@ -111,6 +123,31 @@ public class TrackedRelease
     public DateTime? ExtractionCompletedAtUtc { get; set; }
 
     /// <summary>
+    /// When media conversion started.
+    /// </summary>
+    public DateTime? ConversionStartedAtUtc { get; set; }
+
+    /// <summary>
+    /// When media conversion completed (successfully or not).
+    /// </summary>
+    public DateTime? ConversionCompletedAtUtc { get; set; }
+
+    /// <summary>
+    /// Number of files rewritten by converters.
+    /// </summary>
+    public int FilesConverted { get; set; }
+
+    /// <summary>
+    /// Short human-readable summary of the conversion outcome, e.g. "DoviP7ToP81: 1 converted".
+    /// </summary>
+    public string? ConversionSummary { get; set; }
+
+    /// <summary>
+    /// When the release was moved from the holding directory to the final staging path.
+    /// </summary>
+    public DateTime? PublishedAtUtc { get; set; }
+
+    /// <summary>
     /// When Sonarr/Radarr completed the import.
     /// </summary>
     public DateTime? ImportCompletedAtUtc { get; set; }
@@ -124,6 +161,32 @@ public class TrackedRelease
     /// When the torrent was archived (category changed).
     /// </summary>
     public DateTime? ArchivedAtUtc { get; set; }
+
+    /// <summary>
+    /// Name of the hidden directory under <see cref="StagingPath"/> that holds releases until they are published.
+    /// </summary>
+    public const string HoldingDirectoryName = ".harrbor";
+
+    /// <summary>
+    /// The file/directory name of the release item in staging (matches the torrent name).
+    /// </summary>
+    public string GetItemName() => Path.GetFileName(RemotePath);
+
+    /// <summary>
+    /// The path Sonarr/Radarr sees: <c>{StagingPath}/{name}</c>.
+    /// </summary>
+    public string GetFinalItemPath() => Path.Combine(StagingPath, GetItemName());
+
+    /// <summary>
+    /// The hidden holding path: <c>{StagingPath}/.harrbor/{name}</c>.
+    /// </summary>
+    public string GetHoldingItemPath() => Path.Combine(StagingPath, HoldingDirectoryName, GetItemName());
+
+    /// <summary>
+    /// Where the release's files currently live: the holding path until published, otherwise the final path.
+    /// </summary>
+    public string GetWorkingItemPath() =>
+        UsesHoldingPath && PublishedAtUtc == null ? GetHoldingItemPath() : GetFinalItemPath();
 }
 
 /// <summary>
@@ -185,4 +248,16 @@ public enum ExtractionStatus
     InProgress,
     Completed,
     Failed
+}
+
+/// <summary>
+/// Status of the media conversion phase.
+/// </summary>
+public enum ConversionStatus
+{
+    Pending = 0,
+    InProgress = 1,
+    Completed = 2,
+    Failed = 3,
+    Skipped = 4
 }

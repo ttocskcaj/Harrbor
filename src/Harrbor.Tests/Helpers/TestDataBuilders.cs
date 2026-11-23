@@ -30,6 +30,27 @@ public class TrackedReleaseBuilder
     private DateTime? _importCompletedAtUtc;
     private DateTime? _cleanupCompletedAtUtc;
     private DateTime? _archivedAtUtc;
+    private ConversionStatus _conversionStatus = ConversionStatus.Pending;
+    private bool _usesHoldingPath;
+    private DateTime? _publishedAtUtc;
+
+    public TrackedReleaseBuilder WithConversionStatus(ConversionStatus status)
+    {
+        _conversionStatus = status;
+        return this;
+    }
+
+    public TrackedReleaseBuilder WithUsesHoldingPath(bool usesHoldingPath)
+    {
+        _usesHoldingPath = usesHoldingPath;
+        return this;
+    }
+
+    public TrackedReleaseBuilder WithPublishedAtUtc(DateTime? publishedAtUtc)
+    {
+        _publishedAtUtc = publishedAtUtc;
+        return this;
+    }
 
     public TrackedReleaseBuilder WithId(int id)
     {
@@ -202,7 +223,10 @@ public class TrackedReleaseBuilder
             ExtractionCompletedAtUtc = _extractionCompletedAtUtc,
             ImportCompletedAtUtc = _importCompletedAtUtc,
             CleanupCompletedAtUtc = _cleanupCompletedAtUtc,
-            ArchivedAtUtc = _archivedAtUtc
+            ArchivedAtUtc = _archivedAtUtc,
+            ConversionStatus = _conversionStatus,
+            UsesHoldingPath = _usesHoldingPath,
+            PublishedAtUtc = _publishedAtUtc
         };
     }
 }
@@ -223,6 +247,13 @@ public class JobDefinitionBuilder
     private string? _completedCategory = "completed";
     private TimeSpan _importTimeout = TimeSpan.FromHours(24);
     private bool _enabled = true;
+    private List<string> _converters = [];
+
+    public JobDefinitionBuilder WithConverters(params string[] converters)
+    {
+        _converters = [.. converters];
+        return this;
+    }
 
     public JobDefinitionBuilder WithName(string name)
     {
@@ -325,6 +356,7 @@ public class JobDefinitionBuilder
             ExtractionEnabled = _extractionEnabled,
             CompletedCategory = _completedCategory,
             ImportTimeout = _importTimeout,
+            Converters = _converters,
             Enabled = _enabled
         };
     }

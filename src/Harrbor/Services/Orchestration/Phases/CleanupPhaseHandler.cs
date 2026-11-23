@@ -35,8 +35,12 @@ public class CleanupPhaseHandler : ICleanupPhaseHandler
         {
             try
             {
-                // Construct the staging file/folder path
-                var stagingItemPath = Path.Combine(release.StagingPath, Path.GetFileName(release.RemotePath));
+                // Remove a leftover holding copy too (e.g. a release imported before it was published)
+                var holdingItemPath = release.GetHoldingItemPath();
+                if (release.UsesHoldingPath)
+                    DeleteItem(job, release, holdingItemPath);
+
+                var stagingItemPath = release.GetFinalItemPath();
 
                 if (Directory.Exists(stagingItemPath))
                 {
@@ -76,5 +80,19 @@ public class CleanupPhaseHandler : ICleanupPhaseHandler
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private void DeleteItem(JobDefinition job, TrackedRelease release, string path)
+    {
+        if (Directory.Exists(path))
+            Directory.Delete(path, recursive: true);
+        else if (File.Exists(path))
+            File.Delete(path);
+        else
+            return;
+
+        _logger.LogInformation(
+            "Job '{JobName}': Deleted holding item for '{ReleaseName}': {Path}",
+            job.Name, release.Name, path);
     }
 }

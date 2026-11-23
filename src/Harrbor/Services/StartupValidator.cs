@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using Harrbor.Configuration;
 using Harrbor.Services.Clients;
+using Harrbor.Services.Conversion;
 using Harrbor.Services.RemoteStorage;
 
 namespace Harrbor.Services;
@@ -14,6 +15,8 @@ public class StartupValidator
     private readonly IOptions<SonarrOptions> _sonarrOptions;
     private readonly IOptions<RadarrOptions> _radarrOptions;
     private readonly IOptions<JobOptions> _jobOptions;
+    private readonly ConverterRegistry _converterRegistry;
+    private readonly ToolChecker _toolChecker;
     private readonly ILogger<StartupValidator> _logger;
 
     public StartupValidator(
@@ -24,6 +27,8 @@ public class StartupValidator
         IOptions<SonarrOptions> sonarrOptions,
         IOptions<RadarrOptions> radarrOptions,
         IOptions<JobOptions> jobOptions,
+        ConverterRegistry converterRegistry,
+        ToolChecker toolChecker,
         ILogger<StartupValidator> logger)
     {
         _qBittorrentClient = qBittorrentClient;
@@ -33,11 +38,16 @@ public class StartupValidator
         _sonarrOptions = sonarrOptions;
         _radarrOptions = radarrOptions;
         _jobOptions = jobOptions;
+        _converterRegistry = converterRegistry;
+        _toolChecker = toolChecker;
         _logger = logger;
     }
 
     public async Task ValidateAsync(CancellationToken cancellationToken = default)
     {
+        // Converter config is checked first and is fatal: a typo would otherwise silently skip conversion.
+        await ValidateConvertersAsync(cancellationToken);
+
         _logger.LogInformation("Validating external service connections...");
 
         var errors = new List<string>();
@@ -152,5 +162,46 @@ public class StartupValidator
         {
             _logger.LogInformation("Startup validation completed successfully");
         }
+    }
+
+    private async Task ValidateConvertersAsync(CancellationToken cancellationToken)
+    {
+        var jobs = _jobOptions.Value.Definitions.Where(j => j.Enabled && j.Converters.Count > 0).ToList();
+        if (jobs.Count == 0)
+            return;
+
+        var errors = new List<string>();
+        var converters = new List<IMediaConverter>();
+        foreach (var job in jobs)
+        {
+            foreach (var name in job.Converters)
+            {
+                if (_converterRegistry.TryGet(name, out var converter))
+                    converters.Add(converter);
+                else
+                    errors.Add($"Job '{job.Name}': unknown converter '{name}'");
+            }
+        }
+
+        if (errors.Count > 0)
+        {
+            var available = _converterRegistry.Names.Count == 0 ? "(none)" : string.Join(", ", _converterRegistry.Names);
+            throw new InvalidOperationException(
+                $"Invalid converter configuration: {string.Join("; ", errors)}. Available converters: {available}");
+        }
+
+        var tools = converters.SelectMany(c => c.RequiredTools).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var problems = await _toolChecker.FindProblemsAsync(tools, cancellationToken);
+        if (problems.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"Media conversion tools are missing or not runnable: {string.Join("; ", problems)}. " +
+                "Install them or set their paths under Conversion:Tools.");
+        }
+
+        _logger.LogInformation(
+            "Media converters validated ({Converters}); tools available: {Tools}",
+            string.Join(", ", converters.Select(c => c.Name).Distinct()),
+            string.Join(", ", tools));
     }
 }

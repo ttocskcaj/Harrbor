@@ -33,28 +33,37 @@ dotnet ef database update
 
 ### Core Workflow (OrchestrationWorker)
 
-The service runs as a `BackgroundService` with a reconciliation loop for each configured job. Each cycle processes releases through seven sequential phases:
+The service runs as a `BackgroundService` with a reconciliation loop for each configured job. Each cycle processes releases through nine sequential phases:
 
 1. **Discover** - Query Sonarr/Radarr queue for new downloads, create `TrackedRelease` records
 2. **Process Downloads** - Check qBittorrent for completed torrents, update status when progress=100%
-3. **Process Transfers** - Run rclone transfers from seedbox to local staging (with parallelism limits and retry logic)
-4. **Process Extractions** - Unpack zip/rar/7z archives in staging (SharpCompress; detects old-style `.r00` and new-style `.partN.rar` volume sets)
-5. **Process Imports** - Verify Sonarr/Radarr has imported from staging to final library
-6. **Process Cleanup** - Delete files from staging after confirmed import
-7. **Process Archival** - Change torrent category in qBittorrent to prevent re-processing
+3. **Process Transfers** - Run rclone transfers from seedbox into the hidden holding dir `{StagingPath}/.harrbor/{name}` (with parallelism limits and retry logic)
+4. **Process Extractions** - Unpack zip/rar/7z archives in the holding dir (SharpCompress; detects old-style `.r00` and new-style `.partN.rar` volume sets)
+5. **Process Conversions** - Run the job's `Converters` (e.g. `DoviP7ToP81`) over media files; failures don't block the release
+6. **Publish** - Atomically move the release from the holding dir to `{StagingPath}/{name}`, so the *arr only sees finished files
+7. **Process Imports** - Verify Sonarr/Radarr has imported from staging to final library
+8. **Process Cleanup** - Delete files from staging after confirmed import
+9. **Process Archival** - Change torrent category in qBittorrent to prevent re-processing
+
+Legacy rows (`UsesHoldingPath == false`, created before the holding dir existed) transfer straight to the final path and skip conversion/publish. Use `TrackedRelease.GetWorkingItemPath()` / `GetFinalItemPath()` / `GetHoldingItemPath()` rather than building staging paths by hand.
 
 ### Key Abstractions
 
 - **IMediaService** (`ISonarrClient`, `IRadarrClient`) - Abstraction over Sonarr/Radarr APIs for queue queries and import confirmation
 - **IRemoteStorageService** - rclone-based SFTP transfers from seedbox
 - **IArchiveExtractionService** - SharpCompress-based archive extraction in staging
+- **IMediaConverter** - Pluggable lossless file rewrite (`Evaluate` / `ConvertAsync` / `Verify`); registered in `ConversionServiceCollectionExtensions`, resolved by name via `ConverterRegistry`. See `docs/wiki/Converters.md`
+- **IConversionService** - Runs converters over a release: probe, convert to a hidden temp file, verify, atomic replace, re-probe between chained converters
+- **IMediaProbeService** / `MediaProbeParser` - `ffprobe` JSON → typed `MediaProbe`
+- **IProcessRunner** - Runs external processes and stdout→stdin pipelines without a shell; kills process trees on cancellation
 - **IQBittorrentClient** - Wrapper around qBittorrent API for torrent state queries and category management
 - **MediaServiceResolver** - Resolves the correct media service based on job's `ServiceType`
 
 ### Data Model
 
 `TrackedRelease` tracks each download through the pipeline with status enums for each phase:
-- `DownloadStatus`, `TransferStatus`, `ExtractionStatus`, `ImportStatus`, `CleanupStatus`, `ArchivalStatus`
+- `DownloadStatus`, `TransferStatus`, `ExtractionStatus`, `ConversionStatus`, `ImportStatus`, `CleanupStatus`, `ArchivalStatus`
+- `UsesHoldingPath` + `PublishedAtUtc` gate the Publish phase and Import (`!UsesHoldingPath || PublishedAtUtc != null`)
 - Error tracking: `ErrorCount`, `LastError`, `LastErrorAtUtc`
 - Timestamps for each phase completion
 
@@ -66,9 +75,14 @@ Jobs are configured in `appsettings.json` under the `Jobs.Definitions` array. Ea
 - `QBittorrentCategory` for filtering
 - `TransferParallelism`, `MaxTransferRetries`, `TransferRetryDelay`
 - `ExtractionEnabled` to unpack archives after transfer (default true)
+- `Converters` list of converter names to run in order (default empty); shared settings and tool paths in the `Conversion` section
 - `CompletedCategory` for archival
 
 Use `appsettings.local.json` for local development overrides (not committed).
+
+### CLI
+
+`dotnet Harrbor.dll convert <path> --converter <Name> [--dry-run]` runs converters over a path without DB or jobs (library backfill). Handled at the top of `Program.cs` by `ConversionCli`.
 
 ## Key Packages
 

@@ -10,15 +10,21 @@ public class OrchestrationWorker : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IOptions<JobOptions> _jobOptions;
+    private readonly TransferCoordinator _transfers;
+    private readonly ConversionCoordinator _conversions;
     private readonly ILogger<OrchestrationWorker> _logger;
 
     public OrchestrationWorker(
         IServiceScopeFactory scopeFactory,
         IOptions<JobOptions> jobOptions,
+        TransferCoordinator transfers,
+        ConversionCoordinator conversions,
         ILogger<OrchestrationWorker> logger)
     {
         _scopeFactory = scopeFactory;
         _jobOptions = jobOptions;
+        _transfers = transfers;
+        _conversions = conversions;
         _logger = logger;
     }
 
@@ -37,8 +43,20 @@ public class OrchestrationWorker : BackgroundService
             enabledJobs.Count,
             string.Join(", ", enabledJobs.Select(j => j.Name)));
 
-        var tasks = enabledJobs.Select(job => RunJobLoopAsync(job, stoppingToken));
-        await Task.WhenAll(tasks);
+        try
+        {
+            var tasks = enabledJobs.Select(job => RunJobLoopAsync(job, stoppingToken));
+            await Task.WhenAll(tasks);
+        }
+        finally
+        {
+            // Transfers and conversions run in the background with the same stopping token. Wait for them to
+            // notice the cancellation, so they don't outlive the services they use.
+            var running = _transfers.RunningCount + _conversions.RunningCount;
+            if (running > 0)
+                _logger.LogInformation("Waiting for {Count} running transfer(s)/conversion(s) to stop", running);
+            await Task.WhenAll(_transfers.WhenIdleAsync(), _conversions.WhenIdleAsync());
+        }
 
         _logger.LogInformation("OrchestrationWorker stopping");
     }

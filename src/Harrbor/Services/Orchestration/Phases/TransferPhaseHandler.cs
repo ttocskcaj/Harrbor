@@ -14,23 +14,24 @@ public interface ITransferPhaseHandler : IPhaseHandler
 
 public class TransferPhaseHandler : ITransferPhaseHandler
 {
-    private readonly IRemoteStorageService _remoteStorageService;
-    private readonly IMediaServiceResolver _mediaServiceResolver;
+    private readonly TransferCoordinator _coordinator;
     private readonly ILogger<TransferPhaseHandler> _logger;
 
-    public TransferPhaseHandler(
-        IRemoteStorageService remoteStorageService,
-        IMediaServiceResolver mediaServiceResolver,
-        ILogger<TransferPhaseHandler> logger)
+    public TransferPhaseHandler(TransferCoordinator coordinator, ILogger<TransferPhaseHandler> logger)
     {
-        _remoteStorageService = remoteStorageService;
-        _mediaServiceResolver = mediaServiceResolver;
+        _coordinator = coordinator;
         _logger = logger;
     }
 
     public Task ExecuteAsync(JobDefinition job, HarrborDbContext dbContext, CancellationToken cancellationToken)
     {
-        return ExecuteAsync(job, dbContext, _remoteStorageService, _mediaServiceResolver.GetServiceForJob(job), cancellationToken);
+        // Resolve the services inside each transfer's own scope: the phase's scope ends with the cycle.
+        return StartTransfersAsync(
+            job,
+            dbContext,
+            sp => sp.GetRequiredService<IRemoteStorageService>(),
+            sp => sp.GetRequiredService<IMediaServiceResolver>().GetServiceForJob(job),
+            cancellationToken);
     }
 
     public Task ExecuteAsync(JobDefinition job, HarrborDbContext dbContext, IRemoteStorageService remoteStorageService, CancellationToken cancellationToken)
@@ -39,11 +40,25 @@ public class TransferPhaseHandler : ITransferPhaseHandler
     }
 
     /// <param name="mediaService">Used to check the staged layout against the *arr's queue; null skips the check.</param>
-    public async Task ExecuteAsync(
+    public Task ExecuteAsync(
         JobDefinition job,
         HarrborDbContext dbContext,
         IRemoteStorageService remoteStorageService,
         IMediaService? mediaService,
+        CancellationToken cancellationToken)
+    {
+        return StartTransfersAsync(job, dbContext, _ => remoteStorageService, _ => mediaService, cancellationToken);
+    }
+
+    /// <summary>
+    /// Marks the next releases InProgress (up to the job's parallelism) and starts their transfers in the
+    /// background, then returns without waiting for them, so the later phases of the cycle keep running.
+    /// </summary>
+    private async Task StartTransfersAsync(
+        JobDefinition job,
+        HarrborDbContext dbContext,
+        Func<IServiceProvider, IRemoteStorageService> getRemoteStorage,
+        Func<IServiceProvider, IMediaService?> getMediaService,
         CancellationToken cancellationToken)
     {
         // Check currently in-progress transfers to respect parallelism limit
@@ -64,20 +79,23 @@ public class TransferPhaseHandler : ITransferPhaseHandler
         // Get releases that are ready for transfer:
         // 1. Pending transfers (priority)
         // 2. Failed transfers eligible for retry (under retry limit, cooldown elapsed)
-        var pendingTransfers = await dbContext.TrackedReleases
+        // A release whose transfer task is still winding down is skipped, so it never runs twice.
+        var pendingTransfers = (await dbContext.TrackedReleases
             .Where(r => r.JobName == job.Name
                 && r.DownloadStatus == DownloadStatus.Completed
                 && r.TransferStatus == TransferStatus.Pending)
             .OrderBy(r => r.CreatedAtUtc)
+            .ToListAsync(cancellationToken))
+            .Where(r => !_coordinator.IsRunning(r.Id))
             .Take(availableSlots)
-            .ToListAsync(cancellationToken);
+            .ToList();
 
         var remainingSlots = availableSlots - pendingTransfers.Count;
 
         // If we have remaining slots, look for failed transfers eligible for retry
         if (remainingSlots > 0)
         {
-            var retryableTransfers = await dbContext.TrackedReleases
+            var retryableTransfers = (await dbContext.TrackedReleases
                 .Where(r => r.JobName == job.Name
                     && r.DownloadStatus == DownloadStatus.Completed
                     && r.TransferStatus == TransferStatus.Failed
@@ -85,8 +103,9 @@ public class TransferPhaseHandler : ITransferPhaseHandler
                     && r.LastErrorAtUtc != null
                     && r.LastErrorAtUtc <= retryEligibleCutoff)
                 .OrderBy(r => r.LastErrorAtUtc)
-                .Take(remainingSlots)
-                .ToListAsync(cancellationToken);
+                .ToListAsync(cancellationToken))
+                .Where(r => !_coordinator.IsRunning(r.Id))
+                .Take(remainingSlots);
 
             pendingTransfers.AddRange(retryableTransfers);
         }
@@ -98,31 +117,82 @@ public class TransferPhaseHandler : ITransferPhaseHandler
         var retryCount = pendingTransfers.Count(r => r.TransferStatus == TransferStatus.Failed);
 
         _logger.LogDebug(
-            "Job '{JobName}': Processing {PendingCount} pending transfers and {RetryCount} retries",
+            "Job '{JobName}': Starting {PendingCount} pending transfers and {RetryCount} retries",
             job.Name, pendingCount, retryCount);
 
-        var transferTasks = pendingTransfers
-            .Select(release => TransferReleaseAsync(job, release, dbContext, remoteStorageService, cancellationToken))
+        // Claim the slots before starting anything, from this thread only. The InProgress rows are what the
+        // parallelism limit counts, and what the startup reset puts back to Pending after a crash.
+        var starts = pendingTransfers
+            .Select(r => new TransferStart(r.Id, r.TransferStatus, r.TransferStartedAtUtc))
             .ToList();
-
-        await Task.WhenAll(transferTasks);
-
-        if (mediaService != null)
+        foreach (var release in pendingTransfers)
         {
-            var completed = pendingTransfers.Where(r => r.TransferStatus == TransferStatus.Completed).ToList();
-            if (completed.Count > 0)
-                await CheckStagedLayoutAsync(job, completed, mediaService, cancellationToken);
+            release.TransferStatus = TransferStatus.InProgress;
+            release.TransferStartedAtUtc = DateTime.UtcNow;
+        }
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        // From here on each release belongs to its transfer task (and its DbContext). Stop tracking it here so the
+        // later phases of this cycle read its current state from the database, not this context's stale copy.
+        foreach (var release in pendingTransfers)
+            dbContext.Entry(release).State = EntityState.Detached;
+
+        foreach (var start in starts)
+        {
+            _coordinator.TryStart(
+                start.ReleaseId,
+                job.Name,
+                (sp, ct) => RunTransferAsync(job, start, sp, getRemoteStorage(sp), getMediaService, ct),
+                cancellationToken);
         }
     }
 
-    private async Task TransferReleaseAsync(
+    /// <summary>The state a release was in before it was claimed for a transfer.</summary>
+    private sealed record TransferStart(int ReleaseId, TransferStatus PreviousStatus, DateTime? PreviousStartedAtUtc);
+
+    /// <summary>One transfer, run in the background with its own scope and DbContext.</summary>
+    private async Task RunTransferAsync(
+        JobDefinition job,
+        TransferStart start,
+        IServiceProvider services,
+        IRemoteStorageService remoteStorageService,
+        Func<IServiceProvider, IMediaService?> getMediaService,
+        CancellationToken cancellationToken)
+    {
+        var dbContext = services.GetRequiredService<HarrborDbContext>();
+        var release = await dbContext.TrackedReleases.FirstOrDefaultAsync(r => r.Id == start.ReleaseId, cancellationToken);
+        if (release == null)
+            return;
+
+        var transferred = await TransferReleaseAsync(job, release, start, dbContext, remoteStorageService, cancellationToken);
+        if (!transferred)
+            return;
+
+        IMediaService? mediaService;
+        try
+        {
+            mediaService = getMediaService(services);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Job '{JobName}': No media service, staged layout not checked", job.Name);
+            return;
+        }
+
+        if (mediaService != null)
+            await CheckStagedLayoutAsync(job, [release], mediaService, cancellationToken);
+    }
+
+    /// <returns>True if the transfer completed.</returns>
+    private async Task<bool> TransferReleaseAsync(
         JobDefinition job,
         TrackedRelease release,
+        TransferStart start,
         HarrborDbContext dbContext,
         IRemoteStorageService remoteStorageService,
         CancellationToken cancellationToken)
     {
-        var isRetry = release.TransferStatus == TransferStatus.Failed;
+        var isRetry = start.PreviousStatus == TransferStatus.Failed;
         var attemptNumber = release.ErrorCount + 1;
         var remoteItemPath = release.GetRemoteItemPath();
 
@@ -136,7 +206,9 @@ public class TransferPhaseHandler : ITransferPhaseHandler
         catch (RemoteStorageUnavailableException ex)
         {
             // Couldn't reach the remote, so we don't know whether the source is there.
-            // Don't burn a retry attempt or fail permanently - check again on a later cycle.
+            // Don't burn a retry attempt or fail permanently - put it back as it was and check again on a later cycle.
+            release.TransferStatus = start.PreviousStatus;
+            release.TransferStartedAtUtc = start.PreviousStartedAtUtc;
             release.LastError = ex.Message;
             release.LastErrorAtUtc = DateTime.UtcNow;
             await dbContext.SaveChangesAsync(cancellationToken);
@@ -144,12 +216,13 @@ public class TransferPhaseHandler : ITransferPhaseHandler
             _logger.LogWarning(
                 "Job '{JobName}': Could not check remote source for '{ReleaseName}' at {RemotePath}, will retry: {Error}",
                 job.Name, release.Name, remoteItemPath, ex.Message);
-            return;
+            return false;
         }
 
         if (itemKind == RemoteItemKind.Missing)
         {
             release.TransferStatus = TransferStatus.Failed;
+            release.TransferStartedAtUtc = start.PreviousStartedAtUtc;
             release.LastErrorAtUtc = DateTime.UtcNow;
 
             if (isRetry)
@@ -171,7 +244,7 @@ public class TransferPhaseHandler : ITransferPhaseHandler
             }
 
             await dbContext.SaveChangesAsync(cancellationToken);
-            return;
+            return false;
         }
 
         if (isRetry)
@@ -180,10 +253,6 @@ public class TransferPhaseHandler : ITransferPhaseHandler
                 "Job '{JobName}': Retrying transfer for '{ReleaseName}' (attempt {Attempt}/{MaxAttempts})",
                 job.Name, release.Name, attemptNumber, job.MaxTransferRetries);
         }
-
-        release.TransferStatus = TransferStatus.InProgress;
-        release.TransferStartedAtUtc = DateTime.UtcNow;
-        await dbContext.SaveChangesAsync(cancellationToken);
 
         // Releases go to the hidden holding directory, named after the torrent's top-level item, and are published
         // to the final staging path (which Sonarr/Radarr watches) only once post-processing is done.
@@ -201,6 +270,9 @@ public class TransferPhaseHandler : ITransferPhaseHandler
                 ? await remoteStorageService.TransferFileAsync(remoteItemPath, destinationPath, cancellationToken)
                 : await remoteStorageService.TransferAsync(remoteItemPath, destinationPath, cancellationToken);
 
+            // Shutting down: leave the release InProgress; the startup reset puts it back to Pending.
+            cancellationToken.ThrowIfCancellationRequested();
+
             if (result.Success)
             {
                 release.TransferStatus = TransferStatus.Completed;
@@ -213,6 +285,16 @@ public class TransferPhaseHandler : ITransferPhaseHandler
                     "Job '{JobName}': Transfer completed for '{ReleaseName}' ({BytesTransferred} in {Duration}){RetryInfo}",
                     job.Name, release.Name, FormatSize(result.BytesTransferred), result.Duration,
                     isRetry ? $" after {attemptNumber} attempt(s)" : "");
+            }
+            else if (result.Interrupted)
+            {
+                // Stopped from outside, not a failure: put it back as it was, without using up an attempt.
+                release.TransferStatus = start.PreviousStatus;
+                release.TransferStartedAtUtc = start.PreviousStartedAtUtc;
+
+                _logger.LogWarning(
+                    "Job '{JobName}': Transfer for '{ReleaseName}' was interrupted, will start again: {Error}",
+                    job.Name, release.Name, result.Error);
             }
             else
             {
@@ -228,6 +310,10 @@ public class TransferPhaseHandler : ITransferPhaseHandler
                     job.Name, release.Name, result.Error, attemptNumber, job.MaxTransferRetries,
                     isPermanentlyFailed ? " - permanently failed" : " - will retry");
             }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -245,6 +331,7 @@ public class TransferPhaseHandler : ITransferPhaseHandler
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        return release.TransferStatus == TransferStatus.Completed;
     }
 
     /// <summary>

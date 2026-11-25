@@ -234,4 +234,14 @@ public class RcloneRemoteStorageServiceTests
                 && e.Message.Contains("connection refused")
                 && !e.Message.Contains("secret"));
     }
+
+    [Theory]
+    [InlineData(130, true)]  // SIGINT
+    [InlineData(143, true)]  // SIGTERM
+    [InlineData(137, false)] // SIGKILL (e.g. OOM): a real failure
+    [InlineData(1, false)]
+    public void IsStopSignalExitCode(int exitCode, bool expected)
+    {
+        RcloneRemoteStorageService.IsStopSignalExitCode(exitCode).Should().Be(expected);
+    }
 }

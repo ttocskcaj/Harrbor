@@ -1,10 +1,14 @@
 namespace Harrbor.Services.RemoteStorage;
 
+/// <param name="Interrupted">
+/// The transfer was stopped from outside (rclone got SIGINT/SIGTERM, e.g. during a shutdown) rather than failing.
+/// </param>
 public record TransferResult(
     bool Success,
     long BytesTransferred = 0,
     TimeSpan Duration = default,
-    string? Error = null);
+    string? Error = null,
+    bool Interrupted = false);
 
 public record RemoteStorageConnectionResult(bool Success, string? Error = null);
 

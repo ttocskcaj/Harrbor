@@ -12,8 +12,9 @@ using Xunit;
 
 namespace Harrbor.Tests.Services.Orchestration;
 
-public class ConversionPhaseTests
+public class ConversionPhaseTests : IDisposable
 {
+    private readonly BackgroundTestServices _services = BackgroundTestServices.InMemory();
     private readonly IConversionService _conversionService = A.Fake<IConversionService>();
     private readonly IMediaConverter _converter = A.Fake<IMediaConverter>();
     private readonly ConversionOptions _options = new() { MinFileSizeBytes = 123 };
@@ -27,7 +28,10 @@ public class ConversionPhaseTests
         _conversionService,
         new ConverterRegistry([_converter]),
         Options.Create(_options),
+        _services.Conversions,
         A.Fake<ILogger<ConversionPhaseHandler>>());
+
+    public void Dispose() => _services.Dispose();
 
     private static TrackedRelease ReadyRelease(string downloadId = "ABC") =>
         new TrackedReleaseBuilder()
@@ -48,11 +52,13 @@ public class ConversionPhaseTests
     [Fact]
     public async Task NoConvertersConfigured_Skipped()
     {
-        using var db = TestDbContextFactory.Create();
+        using var db = _services.CreateContext();
         db.TrackedReleases.Add(ReadyRelease());
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         await CreateHandler().ExecuteAsync(Job(), db, TestContext.Current.CancellationToken);
+
+        await _services.Conversions.WhenIdleAsync();
 
         var release = await db.TrackedReleases.SingleAsync(TestContext.Current.CancellationToken);
         release.ConversionStatus.Should().Be(ConversionStatus.Skipped);
@@ -62,13 +68,15 @@ public class ConversionPhaseTests
     [Fact]
     public async Task Success_CompletedWithSummary_UsesHoldingPath()
     {
-        using var db = TestDbContextFactory.Create();
+        using var db = _services.CreateContext();
         db.TrackedReleases.Add(ReadyRelease());
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         A.CallTo(() => _conversionService.ProcessAsync(A<string>._, A<IReadOnlyList<IMediaConverter>>._, A<ConversionRunOptions>._, A<CancellationToken>._))
             .Returns(Result(new ConversionOutcome("/x.mkv", "Fake", ConversionOutcomeKind.Converted)));
 
         await CreateHandler().ExecuteAsync(Job("Fake"), db, TestContext.Current.CancellationToken);
+
+        await _services.Conversions.WhenIdleAsync();
 
         var release = await db.TrackedReleases.SingleAsync(TestContext.Current.CancellationToken);
         release.ConversionStatus.Should().Be(ConversionStatus.Completed);
@@ -87,13 +95,15 @@ public class ConversionPhaseTests
     [Fact]
     public async Task ConverterFailure_FailedAndStillReachesPublish()
     {
-        using var db = TestDbContextFactory.Create();
+        using var db = _services.CreateContext();
         db.TrackedReleases.Add(ReadyRelease());
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         A.CallTo(() => _conversionService.ProcessAsync(A<string>._, A<IReadOnlyList<IMediaConverter>>._, A<ConversionRunOptions>._, A<CancellationToken>._))
             .Returns(Result(new ConversionOutcome("/x.mkv", "Fake", ConversionOutcomeKind.Failed, "bad stream")));
 
         await CreateHandler().ExecuteAsync(Job("Fake"), db, TestContext.Current.CancellationToken);
+
+        await _services.Conversions.WhenIdleAsync();
 
         var release = await db.TrackedReleases.SingleAsync(TestContext.Current.CancellationToken);
         release.ConversionStatus.Should().Be(ConversionStatus.Failed);
@@ -123,13 +133,15 @@ public class ConversionPhaseTests
     [Fact]
     public async Task ServiceThrows_Failed()
     {
-        using var db = TestDbContextFactory.Create();
+        using var db = _services.CreateContext();
         db.TrackedReleases.Add(ReadyRelease());
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         A.CallTo(() => _conversionService.ProcessAsync(A<string>._, A<IReadOnlyList<IMediaConverter>>._, A<ConversionRunOptions>._, A<CancellationToken>._))
             .Throws(new FileNotFoundException("item missing"));
 
         await CreateHandler().ExecuteAsync(Job("Fake"), db, TestContext.Current.CancellationToken);
+
+        await _services.Conversions.WhenIdleAsync();
 
         var release = await db.TrackedReleases.SingleAsync(TestContext.Current.CancellationToken);
         release.ConversionStatus.Should().Be(ConversionStatus.Failed);
@@ -139,7 +151,7 @@ public class ConversionPhaseTests
     [Fact]
     public async Task ConvertsAtMostOneReleasePerCycle()
     {
-        using var db = TestDbContextFactory.Create();
+        using var db = _services.CreateContext();
         var first = ReadyRelease("AAA");
         first.CreatedAtUtc = DateTime.UtcNow.AddMinutes(-10);
         db.TrackedReleases.AddRange(first, ReadyRelease("BBB"));
@@ -148,6 +160,8 @@ public class ConversionPhaseTests
             .Returns(Result());
 
         await CreateHandler().ExecuteAsync(Job("Fake"), db, TestContext.Current.CancellationToken);
+
+        await _services.Conversions.WhenIdleAsync();
 
         var releases = await db.TrackedReleases.ToDictionaryAsync(r => r.DownloadId, TestContext.Current.CancellationToken);
         releases["AAA"].ConversionStatus.Should().Be(ConversionStatus.Completed);
@@ -162,7 +176,7 @@ public class ConversionPhaseTests
     [InlineData(TransferStatus.Completed, ExtractionStatus.Completed, ConversionStatus.Pending, ImportStatus.Completed)]
     public async Task NotReady_Ignored(TransferStatus transfer, ExtractionStatus extraction, ConversionStatus conversion, ImportStatus import)
     {
-        using var db = TestDbContextFactory.Create();
+        using var db = _services.CreateContext();
         var release = ReadyRelease();
         release.TransferStatus = transfer;
         release.ExtractionStatus = extraction;
@@ -172,6 +186,8 @@ public class ConversionPhaseTests
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         await CreateHandler().ExecuteAsync(Job(), db, TestContext.Current.CancellationToken);
+
+        await _services.Conversions.WhenIdleAsync();
 
         (await db.TrackedReleases.SingleAsync(TestContext.Current.CancellationToken)).ConversionStatus.Should().Be(conversion);
     }

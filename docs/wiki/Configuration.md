@@ -183,4 +183,4 @@ Configure remote path mappings so Sonarr/Radarr can find files in staging:
 
 This tells Sonarr/Radarr to look in staging for completed downloads.
 
-Harrbor works on new releases in the hidden `{StagingPath}/.harrbor/` directory and moves them into `{StagingPath}` only when they are ready (see [How It Works](How-It-Works.md#the-holding-directory)). `.harrbor` must stay on the same filesystem as `StagingPath`, so don't mount it separately.
+Harrbor works on new releases in the hidden `{StagingPath}/.harrbor/` directory and moves them into `{StagingPath}` only when they are ready (see [How It Works](How-It-Works.md#6-publish)). `.harrbor` must stay on the same filesystem as `StagingPath`, so don't mount it separately.

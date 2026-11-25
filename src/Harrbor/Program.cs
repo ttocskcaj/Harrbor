@@ -79,6 +79,8 @@ try
     builder.Services.AddTransient<StartupValidator>();
 
     // Phase Handlers
+    builder.Services.AddSingleton<TransferCoordinator>();
+    builder.Services.AddSingleton<ConversionCoordinator>();
     builder.Services.AddScoped<IDiscoveryPhaseHandler, DiscoveryPhaseHandler>();
     builder.Services.AddScoped<IDownloadPhaseHandler, DownloadPhaseHandler>();
     builder.Services.AddScoped<ITransferPhaseHandler, TransferPhaseHandler>();

@@ -200,7 +200,8 @@ public partial class RcloneRemoteStorageService : IRemoteStorageService
             return new TransferResult(
                 Success: false,
                 Duration: stopwatch.Elapsed,
-                Error: $"rclone exit code {process.ExitCode}: {errorOutput}");
+                Error: $"rclone exit code {process.ExitCode}: {errorOutput}",
+                Interrupted: IsStopSignalExitCode(process.ExitCode));
         }
 
         // Parse bytes transferred from rclone output
@@ -281,6 +282,13 @@ public partial class RcloneRemoteStorageService : IRemoteStorageService
 
         return InterpretLsfItemKind(name, process.ExitCode, output, error);
     }
+
+    /// <summary>
+    /// 128 + SIGINT/SIGTERM: rclone (or the shell running it) was asked to stop, e.g. by a Ctrl+C or container stop
+    /// reaching the whole process group before Harrbor's own cancellation. SIGKILL is not included, so a transfer
+    /// that keeps getting OOM-killed still uses up its retries.
+    /// </summary>
+    internal static bool IsStopSignalExitCode(int exitCode) => exitCode is 130 or 143;
 
     // rclone exit codes: https://rclone.org/docs/#exit-code
     private const int RcloneExitDirectoryNotFound = 3;

@@ -37,13 +37,15 @@ The service runs as a `BackgroundService` with a reconciliation loop for each co
 
 1. **Discover** - Query Sonarr/Radarr queue for new downloads, create `TrackedRelease` records
 2. **Process Downloads** - Check qBittorrent for completed torrents, update status when progress=100%
-3. **Process Transfers** - Run rclone transfers from seedbox into the hidden holding dir `{StagingPath}/.harrbor/{name}` (with parallelism limits and retry logic)
+3. **Process Transfers** - Start rclone transfers from seedbox into the hidden holding dir `{StagingPath}/.harrbor/{name}` (with parallelism limits and retry logic); they run in the background and the cycle doesn't wait
 4. **Process Extractions** - Unpack zip/rar/7z archives in the holding dir (SharpCompress; detects old-style `.r00` and new-style `.partN.rar` volume sets)
-5. **Process Conversions** - Run the job's `Converters` (e.g. `DoviP7ToP81`) over media files; failures don't block the release
+5. **Process Conversions** - Start the job's `Converters` (e.g. `DoviP7ToP81`) over media files, in the background, one release at a time globally; failures don't block the release
 6. **Publish** - Atomically move the release from the holding dir to `{StagingPath}/{name}`, so the *arr only sees finished files
 7. **Process Imports** - Verify Sonarr/Radarr has imported from staging to final library
 8. **Process Cleanup** - Delete files from staging after confirmed import
 9. **Process Archival** - Change torrent category in qBittorrent to prevent re-processing
+
+Transfers and conversions run through `TransferCoordinator` / `ConversionCoordinator` (`BackgroundWorkTracker`): the phase marks the release InProgress in its own context, detaches it, and the background task reloads it in a **new DI scope with its own `HarrborDbContext`**. Never share a DbContext between concurrent tasks. On shutdown the worker cancels and waits for them; InProgress rows are reset to Pending at startup.
 
 The staged item is the torrent's top-level item (`TrackedRelease.RemoteItemPath`: root folder, or the file for a torrent without one), not qBittorrent's `content_path` (`RemotePath`), which is the file itself for a single-file torrent inside a root folder. Files are transferred with `rclone copyto`, directories with `rclone copy`. Use `TrackedRelease.GetWorkingItemPath()` / `GetFinalItemPath()` / `GetHoldingItemPath()` rather than building staging paths by hand.
 

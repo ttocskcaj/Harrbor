@@ -17,8 +17,9 @@ namespace Harrbor.Tests.Services.Orchestration;
 /// Tests for the Transfer phase of orchestration.
 /// The Transfer phase runs rclone transfers from seedbox to local staging.
 /// </summary>
-public class TransferPhaseTests
+public class TransferPhaseTests : IDisposable
 {
+    private readonly BackgroundTestServices _services = BackgroundTestServices.InMemory();
     private readonly IRemoteStorageService _remoteStorageService;
     private readonly ILogger<TransferPhaseHandler> _logger;
 
@@ -32,16 +33,18 @@ public class TransferPhaseTests
             .Returns(RemoteItemKind.Directory);
     }
 
+    public void Dispose() => _services.Dispose();
+
     private TransferPhaseHandler CreateHandler()
     {
-        return new TransferPhaseHandler(_remoteStorageService, A.Fake<IMediaServiceResolver>(), _logger);
+        return new TransferPhaseHandler(_services.Transfers, _logger);
     }
 
     [Fact]
     public async Task ProcessTransfers_ParallelismLimitReached_DoesNotStartNew()
     {
         // Arrange
-        using var dbContext = TestDbContextFactory.Create();
+        using var dbContext = _services.CreateContext();
 
         // Add releases that are already in-progress (using up parallelism slots)
         var inProgressRelease1 = new TrackedReleaseBuilder()
@@ -75,6 +78,7 @@ public class TransferPhaseTests
 
         // Act
         await handler.ExecuteAsync(job, dbContext, _remoteStorageService, CancellationToken.None);
+        await _services.Transfers.WhenIdleAsync();
 
         // Assert - transfer should not have been called
         A.CallTo(() => _remoteStorageService.TransferAsync(A<string>._, A<string>._, A<CancellationToken>._))
@@ -85,7 +89,7 @@ public class TransferPhaseTests
     public async Task ProcessTransfers_SlotsAvailable_StartsTransfers()
     {
         // Arrange
-        using var dbContext = TestDbContextFactory.Create();
+        using var dbContext = _services.CreateContext();
         var pendingRelease = new TrackedReleaseBuilder()
             .WithDownloadId("PENDING1")
             .WithJobName("test-job")
@@ -110,6 +114,7 @@ public class TransferPhaseTests
 
         // Act
         await handler.ExecuteAsync(job, dbContext, _remoteStorageService, CancellationToken.None);
+        await _services.Transfers.WhenIdleAsync();
 
         // Assert
         var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
@@ -124,7 +129,7 @@ public class TransferPhaseTests
     {
         // Arrange
         var errorTime = DateTime.UtcNow.AddMinutes(-10); // Well past cooldown
-        using var dbContext = TestDbContextFactory.Create();
+        using var dbContext = _services.CreateContext();
         var failedRelease = new TrackedReleaseBuilder()
             .WithDownloadId("FAILED1")
             .WithJobName("test-job")
@@ -153,6 +158,7 @@ public class TransferPhaseTests
 
         // Act
         await handler.ExecuteAsync(job, dbContext, _remoteStorageService, CancellationToken.None);
+        await _services.Transfers.WhenIdleAsync();
 
         // Assert
         var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
@@ -164,7 +170,7 @@ public class TransferPhaseTests
     {
         // Arrange
         var errorTime = DateTime.UtcNow.AddMinutes(-10);
-        using var dbContext = TestDbContextFactory.Create();
+        using var dbContext = _services.CreateContext();
         var failedRelease = new TrackedReleaseBuilder()
             .WithDownloadId("FAILED1")
             .WithJobName("test-job")
@@ -186,6 +192,7 @@ public class TransferPhaseTests
 
         // Act
         await handler.ExecuteAsync(job, dbContext, _remoteStorageService, CancellationToken.None);
+        await _services.Transfers.WhenIdleAsync();
 
         // Assert
         var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
@@ -199,7 +206,7 @@ public class TransferPhaseTests
     public async Task TransferRelease_Success_ClearsErrorState()
     {
         // Arrange
-        using var dbContext = TestDbContextFactory.Create();
+        using var dbContext = _services.CreateContext();
         var release = new TrackedReleaseBuilder()
             .WithDownloadId("TEST1")
             .WithJobName("test-job")
@@ -226,6 +233,7 @@ public class TransferPhaseTests
 
         // Act
         await handler.ExecuteAsync(job, dbContext, _remoteStorageService, CancellationToken.None);
+        await _services.Transfers.WhenIdleAsync();
 
         // Assert
         var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
@@ -238,7 +246,7 @@ public class TransferPhaseTests
     public async Task TransferRelease_Failure_IncrementsErrorCount()
     {
         // Arrange
-        using var dbContext = TestDbContextFactory.Create();
+        using var dbContext = _services.CreateContext();
         var release = new TrackedReleaseBuilder()
             .WithDownloadId("TEST1")
             .WithJobName("test-job")
@@ -263,6 +271,7 @@ public class TransferPhaseTests
 
         // Act
         await handler.ExecuteAsync(job, dbContext, _remoteStorageService, CancellationToken.None);
+        await _services.Transfers.WhenIdleAsync();
 
         // Assert
         var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
@@ -277,7 +286,7 @@ public class TransferPhaseTests
     {
         // Arrange - Error occurred recently, still in cooldown
         var recentErrorTime = DateTime.UtcNow.AddMinutes(-2);
-        using var dbContext = TestDbContextFactory.Create();
+        using var dbContext = _services.CreateContext();
         var failedRelease = new TrackedReleaseBuilder()
             .WithDownloadId("FAILED1")
             .WithJobName("test-job")
@@ -298,6 +307,7 @@ public class TransferPhaseTests
 
         // Act
         await handler.ExecuteAsync(job, dbContext, _remoteStorageService, CancellationToken.None);
+        await _services.Transfers.WhenIdleAsync();
 
         // Assert
         var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
@@ -325,7 +335,7 @@ public class TransferPhaseTests
     {
         // Arrange - existence check can't reach the seedbox (e.g. SSH connection refused)
         var errorTime = DateTime.UtcNow.AddMinutes(-10);
-        using var dbContext = TestDbContextFactory.Create();
+        using var dbContext = _services.CreateContext();
         dbContext.TrackedReleases.Add(BuildRetryableRelease(errorTime));
         await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
@@ -342,6 +352,7 @@ public class TransferPhaseTests
 
         // Act
         await handler.ExecuteAsync(job, dbContext, _remoteStorageService, CancellationToken.None);
+        await _services.Transfers.WhenIdleAsync();
 
         // Assert - still a normal retryable failure, not permanently failed
         var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
@@ -358,7 +369,7 @@ public class TransferPhaseTests
     public async Task TransferRelease_RetryAndRemoteGone_MarksPermanentlyFailed()
     {
         // Arrange
-        using var dbContext = TestDbContextFactory.Create();
+        using var dbContext = _services.CreateContext();
         dbContext.TrackedReleases.Add(BuildRetryableRelease(DateTime.UtcNow.AddMinutes(-10)));
         await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
@@ -375,6 +386,7 @@ public class TransferPhaseTests
 
         // Act
         await handler.ExecuteAsync(job, dbContext, _remoteStorageService, CancellationToken.None);
+        await _services.Transfers.WhenIdleAsync();
 
         // Assert
         var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
@@ -389,7 +401,7 @@ public class TransferPhaseTests
     private async Task<TrackedRelease> TransferOneAsync(
         string remotePath, string? remoteItemPath, RemoteItemKind kind, IMediaService? mediaService = null)
     {
-        using var dbContext = TestDbContextFactory.Create();
+        using var dbContext = _services.CreateContext();
         dbContext.TrackedReleases.Add(new TrackedReleaseBuilder()
             .WithDownloadId("DEST1")
             .WithJobName("test-job")
@@ -408,6 +420,7 @@ public class TransferPhaseTests
 
         var job = new JobDefinitionBuilder().WithName("test-job").WithRemotePath("/downloads").WithStagingPath("/staging").Build();
         await CreateHandler().ExecuteAsync(job, dbContext, _remoteStorageService, mediaService, TestContext.Current.CancellationToken);
+        await _services.Transfers.WhenIdleAsync();
         return await dbContext.TrackedReleases.SingleAsync(TestContext.Current.CancellationToken);
     }
 
@@ -481,7 +494,7 @@ public class TransferPhaseTests
     [Fact]
     public async Task ProcessTransfers_FirstAttemptAndRemoteUnreachable_StaysPending()
     {
-        using var dbContext = TestDbContextFactory.Create();
+        using var dbContext = _services.CreateContext();
         dbContext.TrackedReleases.Add(new TrackedReleaseBuilder()
             .WithJobName("test-job")
             .WithDownloadStatus(DownloadStatus.Completed)
@@ -493,6 +506,7 @@ public class TransferPhaseTests
 
         var job = new JobDefinitionBuilder().WithName("test-job").Build();
         await CreateHandler().ExecuteAsync(job, dbContext, _remoteStorageService, TestContext.Current.CancellationToken);
+        await _services.Transfers.WhenIdleAsync();
 
         var release = await dbContext.TrackedReleases.SingleAsync(TestContext.Current.CancellationToken);
         release.TransferStatus.Should().Be(TransferStatus.Pending);
@@ -551,5 +565,30 @@ public class TransferPhaseTests
         var release = await TransferOneAsync("/downloads/release1", "/downloads/release1", RemoteItemKind.Directory, mediaService);
 
         release.TransferStatus.Should().Be(TransferStatus.Completed);
+    }
+    [Theory]
+    [InlineData(TransferStatus.Pending, 0)]
+    [InlineData(TransferStatus.Failed, 1)]
+    public async Task TransferRelease_Interrupted_RestoresStatusWithoutUsingAnAttempt(TransferStatus before, int errorCount)
+    {
+        using var dbContext = _services.CreateContext();
+        dbContext.TrackedReleases.Add(new TrackedReleaseBuilder()
+            .WithJobName("test-job")
+            .WithDownloadStatus(DownloadStatus.Completed)
+            .WithTransferStatus(before)
+            .WithErrorCount(errorCount)
+            .WithLastErrorAtUtc(before == TransferStatus.Failed ? DateTime.UtcNow.AddHours(-1) : null)
+            .Build());
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+        A.CallTo(() => _remoteStorageService.TransferAsync(A<string>._, A<string>._, A<CancellationToken>._))
+            .Returns(new TransferResult(Success: false, Error: "rclone exit code 143: ", Interrupted: true));
+
+        var job = new JobDefinitionBuilder().WithName("test-job").Build();
+        await CreateHandler().ExecuteAsync(job, dbContext, _remoteStorageService, TestContext.Current.CancellationToken);
+        await _services.Transfers.WhenIdleAsync();
+
+        var release = await dbContext.TrackedReleases.SingleAsync(TestContext.Current.CancellationToken);
+        release.TransferStatus.Should().Be(before);
+        release.ErrorCount.Should().Be(errorCount);
     }
 }

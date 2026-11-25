@@ -21,7 +21,7 @@ Converts **Dolby Vision profile 7**, the dual-layer format of UHD Blu-ray remuxe
   1. `ffmpeg` extracts the video stream as Annex-B HEVC and pipes it into `dovi_tool -m 2 convert --discard`. This drops the enhancement layer and converts the RPU to profile 8.1. The base layer is copied bit for bit.
   2. `mkvmerge` muxes the new video first, followed by every non-video track from the original: all audio, subtitles, chapters, attachments and tags. It keeps the video's language, track name and frame rate, and the file title.
 - **Verification:** the output must have DV profile 8 with BL compatibility id 1, a duration within `DurationToleranceSeconds` of the source, and the same number of audio and subtitle streams.
-- **Disk space:** about twice the file size is needed temporarily, next to the file. Harrbor checks this before it starts.
+- **Disk space:** about twice the file size is needed temporarily. With `Conversion:ScratchPath` set, that splits into about the file size in the scratch dir (the extracted video stream) and about the file size next to the file (the new container). Otherwise both are next to the file. Harrbor checks free space before it starts.
 - **Tools:** `ffprobe`, `ffmpeg`, `mkvmerge`, `dovi_tool` (all included in the Docker image).
 - **Note:** profile 7 FEL (full enhancement layer) discs lose the FEL's extra detail. This is the usual trade-off of a P7→8.1 conversion.
 
@@ -40,6 +40,18 @@ docker run --rm -v /media/movies:/media/movies ghcr.io/ttocskcaj/harrbor:latest 
 - `--min-size <bytes>`: overrides `Conversion:MinFileSizeBytes`.
 
 It prints one line per file and converter, then a summary. The exit code is `0` on success, `1` if any conversion failed, and `2` for a usage or configuration error. `Conversion` settings are read from `appsettings*.json` in the working directory and from environment variables (e.g. `Conversion__Tools__mkvmerge=/usr/bin/mkvmerge`).
+
+### Scratch location
+
+Converters write intermediates to a scratch dir (`.harrbor-scratch-<id>`), which is deleted when the file is done, whether it succeeded, failed or was cancelled. By default it's next to the media file. Set `Conversion:ScratchPath` to put it on faster storage, for the service and the CLI alike:
+
+```sh
+docker run --rm -v /media/movies:/media/movies -v /cache/scratch:/scratch \
+  -e Conversion__ScratchPath=/scratch ghcr.io/ttocskcaj/harrbor:latest \
+  convert /media/movies --converter DoviP7ToP81
+```
+
+The scratch dir doesn't have to be on the same filesystem as the media; only the temp output, which is renamed into place, does. The service removes leftover scratch dirs under `ScratchPath` when it starts, so don't share a `ScratchPath` between the service and a CLI run that is going at the same time as a service restart.
 
 Each file is replaced with a rename. Files hardlinked elsewhere (e.g. a seeding copy) therefore keep the original content on the other link, and are not modified through it.
 

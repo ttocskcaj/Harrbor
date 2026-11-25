@@ -1,15 +1,25 @@
 using System.Diagnostics;
+using Harrbor.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace Harrbor.Services.Conversion;
 
 public class ConversionService : IConversionService
 {
     private readonly IMediaProbeService _probeService;
+    private readonly IDiskSpaceProvider _diskSpace;
+    private readonly IOptions<ConversionOptions> _options;
     private readonly ILogger<ConversionService> _logger;
 
-    public ConversionService(IMediaProbeService probeService, ILogger<ConversionService> logger)
+    public ConversionService(
+        IMediaProbeService probeService,
+        IDiskSpaceProvider diskSpace,
+        IOptions<ConversionOptions> options,
+        ILogger<ConversionService> logger)
     {
         _probeService = probeService;
+        _diskSpace = diskSpace;
+        _options = options;
         _logger = logger;
     }
 
@@ -117,8 +127,11 @@ public class ConversionService : IConversionService
         CancellationToken cancellationToken)
     {
         var dir = Path.GetDirectoryName(file)!;
+        // The temp output must sit next to the file so the final move is a same-filesystem rename;
+        // intermediates go to the configured scratch dir (e.g. an SSD) when there is one.
         var tmpPath = ConversionArtifacts.TempPathFor(file);
-        var scratchDir = Path.Combine(dir, ConversionArtifacts.ScratchDirPrefix + Guid.NewGuid().ToString("N"));
+        var scratchRoot = ScratchRoot;
+        var scratchDir = Path.Combine(scratchRoot ?? dir, ConversionArtifacts.ScratchDirPrefix + Guid.NewGuid().ToString("N"));
         var stopwatch = Stopwatch.StartNew();
         var replaced = false;
 
@@ -126,7 +139,7 @@ public class ConversionService : IConversionService
 
         try
         {
-            EnsureFreeSpace(file);
+            EnsureFreeSpace(file, scratchRoot);
 
             Directory.CreateDirectory(scratchDir);
             DeleteIfExists(tmpPath);
@@ -177,24 +190,44 @@ public class ConversionService : IConversionService
         }
     }
 
-    private static void EnsureFreeSpace(string file)
+    private string? ScratchRoot =>
+        string.IsNullOrWhiteSpace(_options.Value.ScratchPath) ? null : _options.Value.ScratchPath;
+
+    /// <summary>
+    /// Intermediates need about the size of the video stream (the file size is the upper bound) in the scratch dir,
+    /// and the temp output about the file size next to the media. When both are on one filesystem that's 2x there.
+    /// Unknown free space is not checked; the tools fail if space really runs out.
+    /// </summary>
+    private void EnsureFreeSpace(string file, string? scratchRoot)
     {
-        // Intermediates (elementary stream + new container) need roughly twice the file size.
-        long available;
-        try
+        var size = new FileInfo(file).Length;
+        var dir = Path.GetDirectoryName(file)!;
+
+        var media = _diskSpace.GetDiskSpace(dir);
+        if (scratchRoot == null)
         {
-            available = new DriveInfo(Path.GetDirectoryName(file)!).AvailableFreeSpace;
-        }
-        catch
-        {
-            return; // Can't tell; let the tools fail if space really runs out.
+            Require(media, size * 2, dir);
+            return;
         }
 
-        var required = new FileInfo(file).Length * 2;
-        if (available < required)
+        var scratch = _diskSpace.GetDiskSpace(scratchRoot);
+        if (media != null && scratch != null && media.VolumeId == scratch.VolumeId)
+        {
+            Require(media, size * 2, dir);
+            return;
+        }
+
+        Require(scratch, size, scratchRoot);
+        Require(media, size, dir);
+    }
+
+    private static void Require(DiskSpace? space, long required, string path)
+    {
+        if (space != null && space.AvailableBytes < required)
         {
             throw new IOException(
-                $"Not enough free disk space: {available / (1L << 20)} MiB available, about {required / (1L << 20)} MiB needed");
+                $"Not enough free disk space for {path}: {space.AvailableBytes / (1L << 20)} MiB available, " +
+                $"about {required / (1L << 20)} MiB needed");
         }
     }
 
@@ -232,7 +265,8 @@ public class ConversionService : IConversionService
 }
 
 /// <summary>
-/// Naming of the temp outputs and scratch dirs that conversion creates next to media files.
+/// Naming of the temp outputs (next to media files) and scratch dirs (next to media files, or under
+/// <c>Conversion:ScratchPath</c>) that conversion creates.
 /// </summary>
 public static class ConversionArtifacts
 {

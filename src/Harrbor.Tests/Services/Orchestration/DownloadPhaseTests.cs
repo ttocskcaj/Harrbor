@@ -168,6 +168,37 @@ public class DownloadPhaseTests
         // Assert
         var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedRelease.RemotePath.Should().Be("/downloads/actual/content/path");
+        updatedRelease.RemoteItemPath.Should().Be("/downloads/actual");
+    }
+
+    [Theory]
+    // Multi-file torrent with a root folder
+    [InlineData("Show.S01", "/downloads/radarr/Show.S01", "/downloads/radarr/Show.S01", "Show.S01")]
+    // Single file inside a root folder (Dune): content_path is the file
+    [InlineData("Dune-FraMeSToR", "/downloads/radarr/Dune-FraMeSToR/Dune-FraMeSToR.mkv", "/downloads/radarr/Dune-FraMeSToR", "Dune-FraMeSToR")]
+    // Plain single-file torrent (Kubo)
+    [InlineData("Kubo-FGT.mkv", "/downloads/radarr/Kubo-FGT.mkv", "/downloads/radarr/Kubo-FGT.mkv", "Kubo-FGT.mkv")]
+    public async Task ProcessDownloads_SetsRemoteItemPathToTorrentTopLevelItem(
+        string name, string contentPath, string expectedItemPath, string expectedItemName)
+    {
+        using var dbContext = TestDbContextFactory.Create();
+        dbContext.TrackedReleases.Add(new TrackedReleaseBuilder()
+            .WithDownloadId("ABC123")
+            .WithJobName("test-job")
+            .WithDownloadStatus(DownloadStatus.Pending)
+            .WithRemotePath("/media/import/whatever")
+            .Build());
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+        A.CallTo(() => _qBittorrentClient.GetTorrentAsync("ABC123", A<CancellationToken>._))
+            .Returns(new TorrentInfo { Hash = "ABC123", Name = name, Progress = 1.0, ContentPath = contentPath, SavePath = "/downloads/radarr/" });
+
+        var job = new JobDefinitionBuilder().WithName("test-job").Build();
+        await CreateHandler().ExecuteAsync(job, dbContext, _qBittorrentClient, TestContext.Current.CancellationToken);
+
+        var release = await dbContext.TrackedReleases.SingleAsync(TestContext.Current.CancellationToken);
+        release.RemotePath.Should().Be(contentPath);
+        release.RemoteItemPath.Should().Be(expectedItemPath);
+        release.GetItemName().Should().Be(expectedItemName);
     }
 
     [Fact]
@@ -204,6 +235,7 @@ public class DownloadPhaseTests
         // Assert
         var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
         updatedRelease.RemotePath.Should().Be("/downloads/Test.Release");
+        updatedRelease.RemoteItemPath.Should().Be("/downloads/Test.Release");
     }
 
     [Fact]

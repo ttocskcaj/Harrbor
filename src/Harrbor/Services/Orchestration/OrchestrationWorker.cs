@@ -118,7 +118,7 @@ public class OrchestrationWorker : BackgroundService
         // Log summary of tracked releases for this job
         var summary = await dbContext.TrackedReleases
             .Where(r => r.JobName == job.Name)
-            .GroupBy(r => new { r.DownloadStatus, r.TransferStatus, r.ExtractionStatus, r.ConversionStatus, Published = r.PublishedAtUtc != null || !r.UsesHoldingPath, r.ImportStatus })
+            .GroupBy(r => new { r.DownloadStatus, r.TransferStatus, r.ExtractionStatus, r.ConversionStatus, Published = r.PublishedAtUtc != null, r.ImportStatus })
             .Select(g => new { g.Key, Count = g.Count() })
             .ToListAsync(cancellationToken);
 

@@ -14,21 +14,41 @@ public record RemoteStorageConnectionResult(bool Success, string? Error = null);
 /// </summary>
 public class RemoteStorageUnavailableException(string message) : Exception(message);
 
+/// <summary>What a remote path refers to.</summary>
+public enum RemoteItemKind
+{
+    Missing,
+    File,
+    Directory
+}
+
 public interface IRemoteStorageService
 {
+    /// <summary>
+    /// Copies a remote directory's contents into <paramref name="destinationPath"/> (<c>rclone copy</c>).
+    /// </summary>
     Task<TransferResult> TransferAsync(
         string sourcePath,
         string destinationPath,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Checks whether a path exists on the remote.
+    /// Copies a single remote file to exactly <paramref name="destinationPath"/> (<c>rclone copyto</c>), so the result
+    /// is a file and not a directory named like the file.
     /// </summary>
-    /// <returns>true if the path exists; false only if the remote positively reported it as not found.</returns>
+    Task<TransferResult> TransferFileAsync(
+        string sourcePath,
+        string destinationPath,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reports whether a remote path is a file, a directory, or missing.
+    /// </summary>
+    /// <returns><see cref="RemoteItemKind.Missing"/> only if the remote positively reported the path as not found.</returns>
     /// <exception cref="RemoteStorageUnavailableException">
-    /// The check could not be completed (e.g. connection refused, auth failure), so existence is unknown.
+    /// The check could not be completed (e.g. connection refused, auth failure), so the result is unknown.
     /// </exception>
-    Task<bool> ExistsAsync(string path, CancellationToken cancellationToken = default);
+    Task<RemoteItemKind> GetItemKindAsync(string path, CancellationToken cancellationToken = default);
 
     Task<RemoteStorageConnectionResult> TestConnectionAsync(CancellationToken cancellationToken = default);
 }

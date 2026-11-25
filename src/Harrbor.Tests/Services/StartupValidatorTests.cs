@@ -57,7 +57,8 @@ public class StartupValidatorTests : IDisposable
     private StartupValidator CreateValidator(
         IOptions<SonarrOptions>? sonarrOptions = null,
         IOptions<RadarrOptions>? radarrOptions = null,
-        IOptions<JobOptions>? jobOptions = null)
+        IOptions<JobOptions>? jobOptions = null,
+        ConversionOptions? conversionOptions = null)
     {
         return new StartupValidator(
             _qBittorrentClient,
@@ -67,6 +68,7 @@ public class StartupValidatorTests : IDisposable
             sonarrOptions ?? _sonarrOptions,
             radarrOptions ?? _radarrOptions,
             jobOptions ?? _jobOptions,
+            Options.Create(conversionOptions ?? new ConversionOptions()),
             new ConverterRegistry([_converter]),
             new ToolChecker(_processRunner, Options.Create(new ConversionOptions())),
             _logger);
@@ -512,5 +514,53 @@ public class StartupValidatorTests : IDisposable
         await validator.ValidateAsync(TestContext.Current.CancellationToken);
 
         A.CallTo(() => _processRunner.RunAsync(A<ProcessSpec>._, A<CancellationToken>._)).MustNotHaveHappened();
+    }
+
+    private int LoggedErrors() =>
+        Fake.GetCalls(_logger).Count(c => c.Method.Name == "Log" && (LogLevel)c.Arguments[0]! == LogLevel.Error);
+
+    [Fact]
+    public async Task ValidateAsync_ScratchPathMissing_IsCreated()
+    {
+        A.CallTo(() => _remoteStorageService.TestConnectionAsync(A<CancellationToken>._))
+            .Returns(new RemoteStorageConnectionResult(true));
+        var root = Path.Combine(Path.GetTempPath(), $"harrbor-scratch-{Guid.NewGuid():N}");
+        var scratch = Path.Combine(root, "nested");
+        try
+        {
+            var validator = CreateValidator(jobOptions: JobWithConverters(), conversionOptions: new ConversionOptions { ScratchPath = scratch });
+
+            await validator.ValidateAsync(TestContext.Current.CancellationToken);
+
+            Directory.Exists(scratch).Should().BeTrue();
+            Directory.EnumerateFileSystemEntries(scratch).Should().BeEmpty("the write test file is removed");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ValidateAsync_ScratchPathNotCreatable_LogsErrorButContinues()
+    {
+        A.CallTo(() => _remoteStorageService.TestConnectionAsync(A<CancellationToken>._))
+            .Returns(new RemoteStorageConnectionResult(true));
+        var file = Path.GetTempFileName(); // a file can't be a directory's parent
+        try
+        {
+            var validator = CreateValidator(jobOptions: JobWithConverters(),
+                conversionOptions: new ConversionOptions { ScratchPath = Path.Combine(file, "scratch") });
+
+            var act = () => validator.ValidateAsync(TestContext.Current.CancellationToken);
+
+            await act.Should().NotThrowAsync();
+            LoggedErrors().Should().BeGreaterThan(0);
+        }
+        finally
+        {
+            File.Delete(file);
+        }
     }
 }

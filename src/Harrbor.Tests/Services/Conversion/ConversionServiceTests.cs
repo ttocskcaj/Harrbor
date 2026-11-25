@@ -1,7 +1,9 @@
 using FakeItEasy;
 using FluentAssertions;
+using Harrbor.Configuration;
 using Harrbor.Services.Conversion;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace Harrbor.Tests.Services.Conversion;
@@ -9,6 +11,9 @@ namespace Harrbor.Tests.Services.Conversion;
 public class ConversionServiceTests : IDisposable
 {
     private readonly string _dir = Path.Combine(Path.GetTempPath(), $"harrbor-conv-{Guid.NewGuid():N}");
+    private readonly string _scratch = Path.Combine(Path.GetTempPath(), $"harrbor-scratch-{Guid.NewGuid():N}");
+    private readonly ConversionOptions _options = new();
+    private readonly FakeDiskSpace _disk = new();
     private readonly FakeProbeService _probe = new();
     private static readonly ConversionRunOptions Run = new(DryRun: false, MinFileSizeBytes: 0);
 
@@ -21,9 +26,12 @@ public class ConversionServiceTests : IDisposable
     {
         if (Directory.Exists(_dir))
             Directory.Delete(_dir, recursive: true);
+        if (Directory.Exists(_scratch))
+            Directory.Delete(_scratch, recursive: true);
     }
 
-    private ConversionService CreateService() => new(_probe, A.Fake<ILogger<ConversionService>>());
+    private ConversionService CreateService() =>
+        new(_probe, _disk, Options.Create(_options), A.Fake<ILogger<ConversionService>>());
 
     private string Write(string relative, string content)
     {
@@ -238,9 +246,128 @@ public class ConversionServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ScratchPath_Set_ScratchUnderScratchPathAndTempOutputNextToFile()
+    {
+        _options.ScratchPath = _scratch;
+        var file = Write("Movie/movie.mkv", "orig");
+        var converter = new FakeConverter("A", "orig", "A");
+
+        var result = await CreateService().ProcessAsync(file, [converter], Run, TestContext.Current.CancellationToken);
+
+        result.Converted.Should().Be(1);
+        File.ReadAllText(file).Should().Be("A");
+        Path.GetDirectoryName(converter.LastScratchDir).Should().Be(_scratch);
+        Path.GetFileName(converter.LastScratchDir).Should().StartWith(ConversionArtifacts.ScratchDirPrefix);
+        converter.LastOutputPath.Should().Be(Path.Combine(_dir, "Movie", ".movie.harrbor-tmp.mkv"));
+        Directory.EnumerateFileSystemEntries(_scratch).Should().BeEmpty("the scratch dir is removed on success");
+        AllEntries().Should().BeEquivalentTo("Movie", Path.Combine("Movie", "movie.mkv"));
+    }
+
+    [Fact]
+    public async Task ScratchPath_Set_ScratchRemovedOnFailure()
+    {
+        _options.ScratchPath = _scratch;
+        var file = Write("movie.mkv", "orig");
+        var converter = new FakeConverter("A", "orig", "A") { ThrowAfterWriting = true };
+
+        var result = await CreateService().ProcessAsync(file, [converter], Run, TestContext.Current.CancellationToken);
+
+        result.Failed.Should().Be(1);
+        File.ReadAllText(file).Should().Be("orig");
+        Directory.EnumerateFileSystemEntries(_scratch).Should().BeEmpty();
+        AllEntries().Should().BeEquivalentTo("movie.mkv");
+    }
+
+    [Fact]
+    public async Task ScratchPath_Set_ScratchRemovedOnCancellation()
+    {
+        _options.ScratchPath = _scratch;
+        var file = Write("movie.mkv", "orig");
+        var converter = new FakeConverter("A", "orig", "A") { CancelAfterWriting = true };
+
+        var act = () => CreateService().ProcessAsync(file, [converter], Run, TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        File.ReadAllText(file).Should().Be("orig");
+        Directory.EnumerateFileSystemEntries(_scratch).Should().BeEmpty();
+        AllEntries().Should().BeEquivalentTo("movie.mkv");
+    }
+
+    [Fact]
+    public async Task ScratchPath_Null_ScratchNextToFile()
+    {
+        var file = Write("Movie/movie.mkv", "orig");
+        var converter = new FakeConverter("A", "orig", "A");
+
+        await CreateService().ProcessAsync(file, [converter], Run, TestContext.Current.CancellationToken);
+
+        Path.GetDirectoryName(converter.LastScratchDir).Should().Be(Path.Combine(_dir, "Movie"));
+        Directory.Exists(_scratch).Should().BeFalse();
+    }
+
+    // The test file is 100 bytes, so 2x = 200.
+    [Theory]
+    [InlineData(false, 199, 0, false)]    // no scratch path: media fs needs 2x
+    [InlineData(false, 200, 0, true)]
+    [InlineData(true, 100, 100, true)]    // separate filesystems: 1x on each
+    [InlineData(true, 99, 1000, false)]   // media fs short of the temp output
+    [InlineData(true, 1000, 99, false)]   // scratch fs short of the intermediates
+    public async Task FreeSpaceCheck_UsesTheRightFilesystemForEachPart(bool useScratch, long mediaFree, long scratchFree, bool converts)
+    {
+        if (useScratch)
+            _options.ScratchPath = _scratch;
+        var file = Write("movie.mkv", new string('x', 100));
+        _disk.Space = path => path.StartsWith(_scratch)
+            ? new DiskSpace("scratch-fs", scratchFree)
+            : new DiskSpace("media-fs", mediaFree);
+        var converter = new FakeConverter("A", from: null, to: "A");
+
+        var result = await CreateService().ProcessAsync(file, [converter], Run, TestContext.Current.CancellationToken);
+
+        result.Converted.Should().Be(converts ? 1 : 0);
+        if (!converts)
+        {
+            result.FirstError.Should().Contain("Not enough free disk space");
+            converter.ConvertCalls.Should().Be(0);
+        }
+    }
+
+    [Theory]
+    [InlineData(199, false)]
+    [InlineData(200, true)]
+    public async Task FreeSpaceCheck_ScratchPathOnSameFilesystem_Needs2x(long free, bool converts)
+    {
+        _options.ScratchPath = _scratch;
+        var file = Write("movie.mkv", new string('x', 100));
+        _disk.Space = _ => new DiskSpace("one-fs", free);
+
+        var result = await CreateService().ProcessAsync(file, [new FakeConverter("A", null, "A")], Run, TestContext.Current.CancellationToken);
+
+        result.Converted.Should().Be(converts ? 1 : 0);
+    }
+
+    [Fact]
+    public async Task FreeSpaceCheck_UnknownSpace_NotChecked()
+    {
+        _options.ScratchPath = _scratch;
+        var file = Write("movie.mkv", new string('x', 100));
+        _disk.Space = _ => null;
+
+        var result = await CreateService().ProcessAsync(file, [new FakeConverter("A", null, "A")], Run, TestContext.Current.CancellationToken);
+
+        result.Converted.Should().Be(1);
+    }
+
+    [Fact]
     public void TempPathFor_IsHiddenInSameDirectory()
     {
         ConversionArtifacts.TempPathFor("/a/b/Movie (2023).mkv").Should().Be("/a/b/.Movie (2023).harrbor-tmp.mkv");
+    }
+
+    private sealed class FakeDiskSpace : IDiskSpaceProvider
+    {
+        public Func<string, DiskSpace?> Space { get; set; } = _ => new DiskSpace("fs", long.MaxValue);
+        public DiskSpace? GetDiskSpace(string path) => Space(path);
     }
 
     /// <summary>Probe whose only content is the file text, exposed as the "content" format tag.</summary>
@@ -270,6 +397,7 @@ public class ConversionServiceTests : IDisposable
         public IReadOnlyCollection<string> Extensions => [".mkv"];
         public IReadOnlyCollection<string> RequiredTools => [];
         public bool ThrowAfterWriting { get; init; }
+        public bool CancelAfterWriting { get; init; }
         public bool FailVerification { get; init; }
         public bool Unsupported { get; init; }
         public int EvaluateCalls { get; private set; }
@@ -299,6 +427,8 @@ public class ConversionServiceTests : IDisposable
             await File.WriteAllTextAsync(outputPath, to, cancellationToken);
             if (ThrowAfterWriting)
                 throw new InvalidOperationException("boom");
+            if (CancelAfterWriting)
+                throw new OperationCanceledException();
         }
 
         public ConversionVerification Verify(MediaProbe source, MediaProbe output) =>

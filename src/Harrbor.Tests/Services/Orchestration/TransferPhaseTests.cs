@@ -2,6 +2,8 @@ using FakeItEasy;
 using FluentAssertions;
 using Harrbor.Configuration;
 using Harrbor.Data.Entities;
+using Harrbor.Services;
+using Harrbor.Services.Clients;
 using Harrbor.Services.Orchestration.Phases;
 using Harrbor.Services.RemoteStorage;
 using Harrbor.Tests.Helpers;
@@ -24,11 +26,15 @@ public class TransferPhaseTests
     {
         _remoteStorageService = A.Fake<IRemoteStorageService>();
         _logger = A.Fake<ILogger<TransferPhaseHandler>>();
+
+        // Remote items are directories unless a test says otherwise
+        A.CallTo(() => _remoteStorageService.GetItemKindAsync(A<string>._, A<CancellationToken>._))
+            .Returns(RemoteItemKind.Directory);
     }
 
     private TransferPhaseHandler CreateHandler()
     {
-        return new TransferPhaseHandler(_remoteStorageService, _logger);
+        return new TransferPhaseHandler(_remoteStorageService, A.Fake<IMediaServiceResolver>(), _logger);
     }
 
     [Fact]
@@ -133,8 +139,6 @@ public class TransferPhaseTests
         dbContext.TrackedReleases.Add(failedRelease);
         await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        A.CallTo(() => _remoteStorageService.ExistsAsync(A<string>._, A<CancellationToken>._))
-            .Returns(true);
         A.CallTo(() => _remoteStorageService.TransferAsync(
             A<string>._, A<string>._, A<CancellationToken>._))
             .Returns(new TransferResult(Success: true, BytesTransferred: 1024));
@@ -325,7 +329,7 @@ public class TransferPhaseTests
         dbContext.TrackedReleases.Add(BuildRetryableRelease(errorTime));
         await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        A.CallTo(() => _remoteStorageService.ExistsAsync(A<string>._, A<CancellationToken>._))
+        A.CallTo(() => _remoteStorageService.GetItemKindAsync(A<string>._, A<CancellationToken>._))
             .Throws(new RemoteStorageUnavailableException("connection refused"));
 
         var job = new JobDefinitionBuilder()
@@ -358,8 +362,8 @@ public class TransferPhaseTests
         dbContext.TrackedReleases.Add(BuildRetryableRelease(DateTime.UtcNow.AddMinutes(-10)));
         await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        A.CallTo(() => _remoteStorageService.ExistsAsync(A<string>._, A<CancellationToken>._))
-            .Returns(false);
+        A.CallTo(() => _remoteStorageService.GetItemKindAsync(A<string>._, A<CancellationToken>._))
+            .Returns(RemoteItemKind.Missing);
 
         var job = new JobDefinitionBuilder()
             .WithName("test-job")
@@ -382,10 +386,8 @@ public class TransferPhaseTests
             .MustNotHaveHappened();
     }
 
-    [Theory]
-    [InlineData(true, "/staging/.harrbor/release1")]
-    [InlineData(false, "/staging/release1")]
-    public async Task ProcessTransfers_DestinationDependsOnHoldingPath(bool usesHoldingPath, string expectedDestination)
+    private async Task<TrackedRelease> TransferOneAsync(
+        string remotePath, string? remoteItemPath, RemoteItemKind kind, IMediaService? mediaService = null)
     {
         using var dbContext = TestDbContextFactory.Create();
         dbContext.TrackedReleases.Add(new TrackedReleaseBuilder()
@@ -393,18 +395,161 @@ public class TransferPhaseTests
             .WithJobName("test-job")
             .WithDownloadStatus(DownloadStatus.Completed)
             .WithTransferStatus(TransferStatus.Pending)
-            .WithRemotePath("/downloads/release1")
+            .WithRemotePath(remotePath)
+            .WithRemoteItemPath(remoteItemPath)
             .WithStagingPath("/staging")
-            .WithUsesHoldingPath(usesHoldingPath)
             .Build());
         await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+        A.CallTo(() => _remoteStorageService.GetItemKindAsync(A<string>._, A<CancellationToken>._)).Returns(kind);
         A.CallTo(() => _remoteStorageService.TransferAsync(A<string>._, A<string>._, A<CancellationToken>._))
             .Returns(new TransferResult(Success: true, BytesTransferred: 1));
+        A.CallTo(() => _remoteStorageService.TransferFileAsync(A<string>._, A<string>._, A<CancellationToken>._))
+            .Returns(new TransferResult(Success: true, BytesTransferred: 1));
+
+        var job = new JobDefinitionBuilder().WithName("test-job").WithRemotePath("/downloads").WithStagingPath("/staging").Build();
+        await CreateHandler().ExecuteAsync(job, dbContext, _remoteStorageService, mediaService, TestContext.Current.CancellationToken);
+        return await dbContext.TrackedReleases.SingleAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task ProcessTransfers_MultiFileRoot_CopiesDirectoryIntoHoldingPath()
+    {
+        var release = await TransferOneAsync("/downloads/Show.S01", "/downloads/Show.S01", RemoteItemKind.Directory);
+
+        release.TransferStatus.Should().Be(TransferStatus.Completed);
+        A.CallTo(() => _remoteStorageService.GetItemKindAsync("/downloads/Show.S01", A<CancellationToken>._))
+            .MustHaveHappenedOnceExactly();
+        A.CallTo(() => _remoteStorageService.TransferAsync("/downloads/Show.S01", "/staging/.harrbor/Show.S01", A<CancellationToken>._))
+            .MustHaveHappenedOnceExactly();
+        A.CallTo(() => _remoteStorageService.TransferFileAsync(A<string>._, A<string>._, A<CancellationToken>._))
+            .MustNotHaveHappened();
+    }
+
+    [Fact]
+    public async Task ProcessTransfers_SingleFileInRootFolder_CopiesTheRootFolder()
+    {
+        // Dune: content_path is the file, but the torrent's top-level item is its root folder
+        var release = await TransferOneAsync(
+            "/downloads/Dune.Part.Two-FraMeSToR/Dune.Part.Two-FraMeSToR.mkv",
+            "/downloads/Dune.Part.Two-FraMeSToR",
+            RemoteItemKind.Directory);
+
+        release.TransferStatus.Should().Be(TransferStatus.Completed);
+        release.GetFinalItemPath().Should().Be("/staging/Dune.Part.Two-FraMeSToR");
+        A.CallTo(() => _remoteStorageService.TransferAsync(
+                "/downloads/Dune.Part.Two-FraMeSToR", "/staging/.harrbor/Dune.Part.Two-FraMeSToR", A<CancellationToken>._))
+            .MustHaveHappenedOnceExactly();
+        A.CallTo(() => _remoteStorageService.TransferFileAsync(A<string>._, A<string>._, A<CancellationToken>._))
+            .MustNotHaveHappened();
+    }
+
+    [Fact]
+    public async Task ProcessTransfers_PlainSingleFile_CopiesToFilePath()
+    {
+        // Kubo: the torrent is just a file, so it's staged as a file, not as a directory named like the file
+        var release = await TransferOneAsync("/downloads/Kubo-FGT.mkv", "/downloads/Kubo-FGT.mkv", RemoteItemKind.File);
+
+        release.TransferStatus.Should().Be(TransferStatus.Completed);
+        A.CallTo(() => _remoteStorageService.TransferFileAsync(
+                "/downloads/Kubo-FGT.mkv", "/staging/.harrbor/Kubo-FGT.mkv", A<CancellationToken>._))
+            .MustHaveHappenedOnceExactly();
+        A.CallTo(() => _remoteStorageService.TransferAsync(A<string>._, A<string>._, A<CancellationToken>._))
+            .MustNotHaveHappened();
+    }
+
+    [Fact]
+    public async Task ProcessTransfers_NoRemoteItemPath_FallsBackToRemotePath()
+    {
+        await TransferOneAsync("/downloads/release1", remoteItemPath: null, RemoteItemKind.Directory);
+
+        A.CallTo(() => _remoteStorageService.TransferAsync("/downloads/release1", "/staging/.harrbor/release1", A<CancellationToken>._))
+            .MustHaveHappenedOnceExactly();
+    }
+
+    [Fact]
+    public async Task ProcessTransfers_FirstAttemptAndRemoteMissing_FailsRetryably()
+    {
+        var release = await TransferOneAsync("/downloads/release1", "/downloads/release1", RemoteItemKind.Missing);
+
+        release.TransferStatus.Should().Be(TransferStatus.Failed);
+        release.ErrorCount.Should().Be(1);
+        release.LastError.Should().Contain("not found");
+        A.CallTo(() => _remoteStorageService.TransferAsync(A<string>._, A<string>._, A<CancellationToken>._))
+            .MustNotHaveHappened();
+    }
+
+    [Fact]
+    public async Task ProcessTransfers_FirstAttemptAndRemoteUnreachable_StaysPending()
+    {
+        using var dbContext = TestDbContextFactory.Create();
+        dbContext.TrackedReleases.Add(new TrackedReleaseBuilder()
+            .WithJobName("test-job")
+            .WithDownloadStatus(DownloadStatus.Completed)
+            .WithTransferStatus(TransferStatus.Pending)
+            .Build());
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+        A.CallTo(() => _remoteStorageService.GetItemKindAsync(A<string>._, A<CancellationToken>._))
+            .Throws(new RemoteStorageUnavailableException("connection refused"));
 
         var job = new JobDefinitionBuilder().WithName("test-job").Build();
         await CreateHandler().ExecuteAsync(job, dbContext, _remoteStorageService, TestContext.Current.CancellationToken);
 
-        A.CallTo(() => _remoteStorageService.TransferAsync("/downloads/release1", expectedDestination, A<CancellationToken>._))
-            .MustHaveHappenedOnceExactly();
+        var release = await dbContext.TrackedReleases.SingleAsync(TestContext.Current.CancellationToken);
+        release.TransferStatus.Should().Be(TransferStatus.Pending);
+        release.ErrorCount.Should().Be(0);
+        release.LastError.Should().Be("connection refused");
+    }
+
+    private IMediaService MediaServiceWithOutputPath(string outputPath)
+    {
+        var mediaService = A.Fake<IMediaService>();
+        A.CallTo(() => mediaService.GetQueueAsync(A<CancellationToken>._))
+            .Returns([new QueueItemBuilder().WithDownloadId("DEST1").WithOutputPath(outputPath).Build()]);
+        return mediaService;
+    }
+
+    private int LoggedWarnings() =>
+        Fake.GetCalls(_logger).Count(c => c.Method.Name == "Log" && (LogLevel)c.Arguments[0]! == LogLevel.Warning);
+
+    [Fact]
+    public async Task ProcessTransfers_OutputPathMatchesStagedLayout_NoWarning()
+    {
+        var mediaService = MediaServiceWithOutputPath("/media/seedbox-import/Dune.Part.Two-FraMeSToR/Dune.Part.Two-FraMeSToR.mkv");
+
+        await TransferOneAsync(
+            "/downloads/Dune.Part.Two-FraMeSToR/Dune.Part.Two-FraMeSToR.mkv",
+            "/downloads/Dune.Part.Two-FraMeSToR",
+            RemoteItemKind.Directory,
+            mediaService);
+
+        A.CallTo(() => mediaService.GetQueueAsync(A<CancellationToken>._)).MustHaveHappenedOnceExactly();
+        LoggedWarnings().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ProcessTransfers_OutputPathDoesNotMatchStagedLayout_Warns()
+    {
+        // The pre-0.0.9 bug: the item was named after content_path (the file), not the root folder
+        var mediaService = MediaServiceWithOutputPath("/media/seedbox-import/Dune.Part.Two-FraMeSToR/Dune.Part.Two-FraMeSToR.mkv");
+
+        var release = await TransferOneAsync(
+            "/downloads/Dune.Part.Two-FraMeSToR/Dune.Part.Two-FraMeSToR.mkv",
+            "/downloads/Dune.Part.Two-FraMeSToR/Dune.Part.Two-FraMeSToR.mkv",
+            RemoteItemKind.File,
+            mediaService);
+
+        release.TransferStatus.Should().Be(TransferStatus.Completed, "the check only warns");
+        LoggedWarnings().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ProcessTransfers_QueueUnavailable_TransferStillCompletes()
+    {
+        var mediaService = A.Fake<IMediaService>();
+        A.CallTo(() => mediaService.GetQueueAsync(A<CancellationToken>._)).Throws(new HttpRequestException("down"));
+
+        var release = await TransferOneAsync("/downloads/release1", "/downloads/release1", RemoteItemKind.Directory, mediaService);
+
+        release.TransferStatus.Should().Be(TransferStatus.Completed);
     }
 }

@@ -26,9 +26,17 @@ public class TrackedRelease
     public string JobName { get; set; } = string.Empty;
 
     /// <summary>
-    /// The path to the release on the remote seedbox.
+    /// The path to the release on the remote seedbox: qBittorrent's <c>content_path</c> once the download completes.
+    /// For a single-file torrent this is the file itself, even when the file sits inside a root folder.
     /// </summary>
     public string RemotePath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The torrent's top-level item on the remote (its root folder, or the file for a torrent without one).
+    /// This is what gets transferred, and its name is the staged item's name. Null until the download completes;
+    /// <see cref="RemotePath"/> is used in its place until then.
+    /// </summary>
+    public string? RemoteItemPath { get; set; }
 
     /// <summary>
     /// The path to the release in local staging.
@@ -54,13 +62,6 @@ public class TrackedRelease
     /// Current status of the media conversion phase.
     /// </summary>
     public ConversionStatus ConversionStatus { get; set; } = ConversionStatus.Pending;
-
-    /// <summary>
-    /// True when the release is transferred into the hidden holding directory
-    /// (<c>{StagingPath}/.harrbor/{name}</c>) and published to the final staging path only after
-    /// all post-transfer phases finish. False for rows created before the holding directory existed.
-    /// </summary>
-    public bool UsesHoldingPath { get; set; }
 
     /// <summary>
     /// Current status of the import phase.
@@ -168,9 +169,15 @@ public class TrackedRelease
     public const string HoldingDirectoryName = ".harrbor";
 
     /// <summary>
-    /// The file/directory name of the release item in staging (matches the torrent name).
+    /// The remote item that is transferred: <see cref="RemoteItemPath"/>, or <see cref="RemotePath"/> when it isn't set.
     /// </summary>
-    public string GetItemName() => Path.GetFileName(RemotePath);
+    public string GetRemoteItemPath() =>
+        string.IsNullOrEmpty(RemoteItemPath) ? RemotePath : RemoteItemPath;
+
+    /// <summary>
+    /// The file/directory name of the release item in staging: the name of the torrent's top-level item.
+    /// </summary>
+    public string GetItemName() => Path.GetFileName(GetRemoteItemPath().TrimEnd('/'));
 
     /// <summary>
     /// The path Sonarr/Radarr sees: <c>{StagingPath}/{name}</c>.
@@ -186,7 +193,37 @@ public class TrackedRelease
     /// Where the release's files currently live: the holding path until published, otherwise the final path.
     /// </summary>
     public string GetWorkingItemPath() =>
-        UsesHoldingPath && PublishedAtUtc == null ? GetHoldingItemPath() : GetFinalItemPath();
+        PublishedAtUtc == null ? GetHoldingItemPath() : GetFinalItemPath();
+
+    /// <summary>
+    /// The torrent's top-level item from qBittorrent's paths: the first segment of <paramref name="contentPath"/>
+    /// relative to <paramref name="savePath"/>, or <c>{savePath}/{name}</c> when that can't be worked out.
+    /// Returns null when neither path is known.
+    /// </summary>
+    /// <remarks>
+    /// <c>content_path</c> is the root folder for a multi-file torrent but the file itself for a single-file one,
+    /// even if that file sits inside a root folder, so it can't be used as the transfer root directly.
+    /// </remarks>
+    public static string? ComputeRemoteItemPath(string? savePath, string? contentPath, string? name)
+    {
+        var save = savePath?.TrimEnd('/');
+        var content = contentPath?.TrimEnd('/');
+
+        if (!string.IsNullOrEmpty(save) && !string.IsNullOrEmpty(content))
+        {
+            var prefix = save + "/";
+            if (content.StartsWith(prefix, StringComparison.Ordinal) && content.Length > prefix.Length)
+            {
+                var firstSegment = content[prefix.Length..].Split('/')[0];
+                return prefix + firstSegment;
+            }
+        }
+
+        if (!string.IsNullOrEmpty(save) && !string.IsNullOrEmpty(name))
+            return $"{save}/{name}";
+
+        return string.IsNullOrEmpty(content) ? null : content;
+    }
 }
 
 /// <summary>

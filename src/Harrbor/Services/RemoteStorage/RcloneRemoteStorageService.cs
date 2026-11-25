@@ -84,17 +84,30 @@ public partial class RcloneRemoteStorageService : IRemoteStorageService
         return output;
     }
 
-    public async Task<TransferResult> TransferAsync(
+    public Task<TransferResult> TransferAsync(
         string sourcePath,
         string destinationPath,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        RunTransferAsync("copy", sourcePath, destinationPath, cancellationToken);
+
+    public Task<TransferResult> TransferFileAsync(
+        string sourcePath,
+        string destinationPath,
+        CancellationToken cancellationToken = default) =>
+        RunTransferAsync("copyto", sourcePath, destinationPath, cancellationToken);
+
+    private async Task<TransferResult> RunTransferAsync(
+        string verb,
+        string sourcePath,
+        string destinationPath,
+        CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
         var remoteSource = $"{_remotePrefix}{sourcePath}";
 
         var args = new List<string>
         {
-            "copy",
+            verb,
             $"\"{remoteSource}\"",
             $"\"{destinationPath}\"",
             "--stats=10s",
@@ -236,16 +249,22 @@ public partial class RcloneRemoteStorageService : IRemoteStorageService
         }
     }
 
-    public async Task<bool> ExistsAsync(string path, CancellationToken cancellationToken = default)
+    public async Task<RemoteItemKind> GetItemKindAsync(string path, CancellationToken cancellationToken = default)
     {
-        var remotePath = $"{_remotePrefix}{path}";
+        // List the parent directory: lsf marks directories with a trailing '/', which tells a file from a
+        // directory and uses the same, well-understood "not found" exit codes as a plain listing.
+        var trimmed = path.TrimEnd('/');
+        var name = Path.GetFileName(trimmed);
+        var parent = Path.GetDirectoryName(trimmed);
+        if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(parent))
+            throw new ArgumentException($"Not an item path: '{path}'", nameof(path));
 
         using var process = new Process
         {
             StartInfo = new ProcessStartInfo
             {
                 FileName = "rclone",
-                Arguments = $"lsf \"{remotePath}\" --max-depth=1",
+                Arguments = $"lsf \"{_remotePrefix}{parent}\" --max-depth=1",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -260,7 +279,7 @@ public partial class RcloneRemoteStorageService : IRemoteStorageService
         var output = await outputTask;
         var error = await errorTask;
 
-        return InterpretLsfExistsResult(process.ExitCode, output, error);
+        return InterpretLsfItemKind(name, process.ExitCode, output, error);
     }
 
     // rclone exit codes: https://rclone.org/docs/#exit-code
@@ -268,19 +287,27 @@ public partial class RcloneRemoteStorageService : IRemoteStorageService
     private const int RcloneExitFileNotFound = 4;
 
     /// <summary>
-    /// Interprets the result of <c>rclone lsf &lt;path&gt;</c> as an existence check.
-    /// Only rclone's explicit "not found" exit codes mean the path is gone; any other failure
-    /// (connection refused, auth error, timeout) means existence is unknown and throws.
+    /// Interprets <c>rclone lsf &lt;parent&gt;</c> as a lookup of the entry <paramref name="name"/>.
+    /// Only a successful listing without the entry, or rclone's explicit "not found" exit codes, mean the item is
+    /// missing; any other failure (connection refused, auth error, timeout) means the result is unknown and throws.
     /// </summary>
-    internal static bool InterpretLsfExistsResult(int exitCode, string output, string error)
+    internal static RemoteItemKind InterpretLsfItemKind(string name, int exitCode, string output, string error)
     {
-        // If it's a file, lsf on the exact path returns the filename;
-        // a directory with contents lists its entries.
         if (exitCode == 0)
-            return !string.IsNullOrWhiteSpace(output);
+        {
+            foreach (var line in output.Split('\n'))
+            {
+                var entry = line.TrimEnd('\r');
+                if (entry == name + "/")
+                    return RemoteItemKind.Directory;
+                if (entry == name)
+                    return RemoteItemKind.File;
+            }
+            return RemoteItemKind.Missing;
+        }
 
         if (exitCode is RcloneExitDirectoryNotFound or RcloneExitFileNotFound)
-            return false;
+            return RemoteItemKind.Missing;
 
         var lastErrorLine = error
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)

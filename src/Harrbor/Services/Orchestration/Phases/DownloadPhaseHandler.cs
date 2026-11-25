@@ -94,9 +94,14 @@ public class DownloadPhaseHandler : IDownloadPhaseHandler
                     release.RemotePath = Path.Combine(torrent.SavePath, torrent.Name);
                 }
 
+                // Transfer the torrent's top-level item (root folder or lone file), so staging mirrors the
+                // remote layout. ContentPath alone is wrong for a single file inside a root folder.
+                release.RemoteItemPath = TrackedRelease.ComputeRemoteItemPath(
+                    torrent.SavePath, torrent.ContentPath, torrent.Name) ?? release.RemotePath;
+
                 _logger.LogInformation(
-                    "Job '{JobName}': Download completed for '{ReleaseName}' at {RemotePath}",
-                    job.Name, release.Name, release.RemotePath);
+                    "Job '{JobName}': Download completed for '{ReleaseName}' at {RemotePath} (transfer item: {RemoteItemPath})",
+                    job.Name, release.Name, release.RemotePath, release.RemoteItemPath);
             }
             else
             {

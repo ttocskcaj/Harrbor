@@ -45,7 +45,7 @@ The service runs as a `BackgroundService` with a reconciliation loop for each co
 8. **Process Cleanup** - Delete files from staging after confirmed import
 9. **Process Archival** - Change torrent category in qBittorrent to prevent re-processing
 
-Legacy rows (`UsesHoldingPath == false`, created before the holding dir existed) transfer straight to the final path and skip conversion/publish. Use `TrackedRelease.GetWorkingItemPath()` / `GetFinalItemPath()` / `GetHoldingItemPath()` rather than building staging paths by hand.
+The staged item is the torrent's top-level item (`TrackedRelease.RemoteItemPath`: root folder, or the file for a torrent without one), not qBittorrent's `content_path` (`RemotePath`), which is the file itself for a single-file torrent inside a root folder. Files are transferred with `rclone copyto`, directories with `rclone copy`. Use `TrackedRelease.GetWorkingItemPath()` / `GetFinalItemPath()` / `GetHoldingItemPath()` rather than building staging paths by hand.
 
 ### Key Abstractions
 
@@ -63,7 +63,8 @@ Legacy rows (`UsesHoldingPath == false`, created before the holding dir existed)
 
 `TrackedRelease` tracks each download through the pipeline with status enums for each phase:
 - `DownloadStatus`, `TransferStatus`, `ExtractionStatus`, `ConversionStatus`, `ImportStatus`, `CleanupStatus`, `ArchivalStatus`
-- `UsesHoldingPath` + `PublishedAtUtc` gate the Publish phase and Import (`!UsesHoldingPath || PublishedAtUtc != null`)
+- `PublishedAtUtc` gates Import: a release is importable only once it has been published from the holding dir
+- `RemoteItemPath` is null until the download completes; rows from before 0.0.9 are filled in at startup by `RemoteItemPathBackfill`
 - Error tracking: `ErrorCount`, `LastError`, `LastErrorAtUtc`
 - Timestamps for each phase completion
 
@@ -75,7 +76,7 @@ Jobs are configured in `appsettings.json` under the `Jobs.Definitions` array. Ea
 - `QBittorrentCategory` for filtering
 - `TransferParallelism`, `MaxTransferRetries`, `TransferRetryDelay`
 - `ExtractionEnabled` to unpack archives after transfer (default true)
-- `Converters` list of converter names to run in order (default empty); shared settings and tool paths in the `Conversion` section
+- `Converters` list of converter names to run in order (default empty); shared settings, tool paths and `ScratchPath` (intermediates dir, e.g. on SSD) in the `Conversion` section
 - `CompletedCategory` for archival
 
 Use `appsettings.local.json` for local development overrides (not committed).

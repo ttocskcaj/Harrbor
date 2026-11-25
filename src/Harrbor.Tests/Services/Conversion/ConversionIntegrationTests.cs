@@ -62,7 +62,7 @@ public class ConversionIntegrationTests : IDisposable
 
         var hashBefore = SHA256.HashData(await File.ReadAllBytesAsync(file, ct));
         var options = Options.Create(new ConversionOptions());
-        var service = new ConversionService(new MediaProbeService(_runner, options), A.Fake<ILogger<ConversionService>>());
+        var service = new ConversionService(new MediaProbeService(_runner, options), new DiskSpaceProvider(), options, A.Fake<ILogger<ConversionService>>());
         var converter = new DoviP7ToP81Converter(_runner, options);
 
         var result = await service.ProcessAsync(_dir, [converter], new ConversionRunOptions(false, 0), ct);

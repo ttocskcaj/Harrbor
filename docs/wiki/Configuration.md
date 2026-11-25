@@ -39,6 +39,7 @@ Harrbor is configured via `appsettings.json`. For local development, use `appset
   },
   "Conversion": {
     "DryRun": false,
+    "ScratchPath": null,
     "MinFileSizeBytes": 1073741824,
     "DurationToleranceSeconds": 1,
     "Tools": {
@@ -129,6 +130,7 @@ Settings shared by all [media converters](Converters.md). They only matter for j
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `DryRun` | `false` | Log what would be converted, without writing anything |
+| `ScratchPath` | `null` | Directory for conversion intermediates (e.g. the extracted video stream). Put it on fast local storage such as an SSD to take most of a conversion's I/O off the media filesystem. Null keeps them next to the media file. The temp output always stays next to the media file. Created at startup if missing; leftover scratch dirs in it are removed at startup |
 | `MinFileSizeBytes` | `1073741824` (1 GiB) | Ignore smaller files (samples, extras) |
 | `DurationToleranceSeconds` | `1` | Maximum allowed difference between the source and converted durations |
 | `Tools` | bare names on `PATH` | Map of tool name to executable path: `ffprobe`, `ffmpeg`, `mkvmerge`, `dovi_tool`. The Docker image includes all of them |

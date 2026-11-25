@@ -168,9 +168,18 @@ try
                 stuckConversions.Count);
         }
 
-        // Ensure holding dirs exist and remove conversion leftovers from interrupted runs
         var jobDefinitions = scope.ServiceProvider
             .GetRequiredService<Microsoft.Extensions.Options.IOptions<JobOptions>>().Value.Definitions;
+
+        // Work out the transfer item of rows from before RemoteItemPath existed (needs the job definitions)
+        var backfilled = await RemoteItemPathBackfill.ApplyAsync(db, jobDefinitions);
+        if (backfilled > 0)
+        {
+            scope.ServiceProvider.GetRequiredService<ILogger<Program>>().LogInformation(
+                "Set the remote transfer item for {Count} release(s) tracked before 0.0.9", backfilled);
+        }
+
+        // Ensure holding dirs exist and remove conversion leftovers from interrupted runs
         foreach (var stagingPath in jobDefinitions
             .Where(j => j.Enabled && !string.IsNullOrEmpty(j.StagingPath))
             .Select(j => j.StagingPath)
@@ -191,6 +200,28 @@ try
             {
                 scope.ServiceProvider.GetRequiredService<ILogger<Program>>().LogWarning(
                     ex, "Could not prepare holding directory {Path}", holdingRoot);
+            }
+        }
+
+        // Ensure the conversion scratch dir exists and remove scratch dirs left by interrupted runs
+        var scratchPath = scope.ServiceProvider
+            .GetRequiredService<Microsoft.Extensions.Options.IOptions<ConversionOptions>>().Value.ScratchPath;
+        if (!string.IsNullOrWhiteSpace(scratchPath))
+        {
+            try
+            {
+                Directory.CreateDirectory(scratchPath);
+                var removed = ConversionArtifacts.CleanupLeftovers(scratchPath);
+                if (removed > 0)
+                {
+                    scope.ServiceProvider.GetRequiredService<ILogger<Program>>().LogInformation(
+                        "Removed {Count} leftover conversion scratch dir(s) under {Path}", removed, scratchPath);
+                }
+            }
+            catch (Exception ex)
+            {
+                scope.ServiceProvider.GetRequiredService<ILogger<Program>>().LogWarning(
+                    ex, "Could not prepare conversion scratch directory {Path}", scratchPath);
             }
         }
     }

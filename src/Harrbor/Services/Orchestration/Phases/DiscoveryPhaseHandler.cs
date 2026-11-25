@@ -77,7 +77,6 @@ public class DiscoveryPhaseHandler : IDiscoveryPhaseHandler
                 JobName = job.Name,
                 RemotePath = remotePath,
                 StagingPath = job.StagingPath,
-                UsesHoldingPath = true,
                 DownloadStatus = DownloadStatus.Pending,
                 TransferStatus = TransferStatus.Pending,
                 ImportStatus = ImportStatus.Pending,

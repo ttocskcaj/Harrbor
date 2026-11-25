@@ -29,7 +29,7 @@ public class ConversionPhaseTests
         Options.Create(_options),
         A.Fake<ILogger<ConversionPhaseHandler>>());
 
-    private static TrackedRelease ReadyRelease(string downloadId = "ABC", bool usesHoldingPath = true) =>
+    private static TrackedRelease ReadyRelease(string downloadId = "ABC") =>
         new TrackedReleaseBuilder()
             .WithDownloadId(downloadId)
             .WithJobName("test-job")
@@ -38,7 +38,6 @@ public class ConversionPhaseTests
             .WithTransferStatus(TransferStatus.Completed)
             .WithExtractionStatus(ExtractionStatus.Completed)
             .WithConversionStatus(ConversionStatus.Pending)
-            .WithUsesHoldingPath(usesHoldingPath)
             .Build();
 
     private static JobDefinition Job(params string[] converters) =>
@@ -57,20 +56,6 @@ public class ConversionPhaseTests
 
         var release = await db.TrackedReleases.SingleAsync(TestContext.Current.CancellationToken);
         release.ConversionStatus.Should().Be(ConversionStatus.Skipped);
-        A.CallTo(_conversionService).MustNotHaveHappened();
-    }
-
-    [Fact]
-    public async Task LegacyRelease_Skipped()
-    {
-        using var db = TestDbContextFactory.Create();
-        db.TrackedReleases.Add(ReadyRelease(usesHoldingPath: false));
-        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
-
-        await CreateHandler().ExecuteAsync(Job("Fake"), db, TestContext.Current.CancellationToken);
-
-        (await db.TrackedReleases.SingleAsync(TestContext.Current.CancellationToken))
-            .ConversionStatus.Should().Be(ConversionStatus.Skipped);
         A.CallTo(_conversionService).MustNotHaveHappened();
     }
 

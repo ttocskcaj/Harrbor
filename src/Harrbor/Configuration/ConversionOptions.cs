@@ -15,6 +15,13 @@ public class ConversionOptions
     public bool DryRun { get; set; }
 
     /// <summary>
+    /// Directory for conversion intermediates (e.g. the extracted video stream), ideally on fast local storage.
+    /// Null puts them next to the media file. The temp output always stays next to the media file, since it's
+    /// moved into place with a same-filesystem rename.
+    /// </summary>
+    public string? ScratchPath { get; set; }
+
+    /// <summary>
     /// Files smaller than this are ignored (skips samples, extras). Default 1 GiB.
     /// </summary>
     public long MinFileSizeBytes { get; set; } = 1L << 30;

@@ -31,6 +31,7 @@ public class HarrborDbContext : DbContext
             entity.Property(e => e.Name).HasMaxLength(500).IsRequired();
             entity.Property(e => e.JobName).HasMaxLength(100).IsRequired();
             entity.Property(e => e.RemotePath).HasMaxLength(1000).IsRequired();
+            entity.Property(e => e.RemoteItemPath).HasMaxLength(1000);
             entity.Property(e => e.StagingPath).HasMaxLength(1000).IsRequired();
             entity.Property(e => e.LastError).HasMaxLength(2000);
             entity.Property(e => e.ConversionSummary).HasMaxLength(2000);

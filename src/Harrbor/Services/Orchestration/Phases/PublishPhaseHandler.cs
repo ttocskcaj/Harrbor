@@ -27,7 +27,6 @@ public class PublishPhaseHandler : IPublishPhaseHandler
     {
         var ready = await dbContext.TrackedReleases
             .Where(r => r.JobName == job.Name
-                && r.UsesHoldingPath
                 && r.PublishedAtUtc == null
                 && r.TransferStatus == TransferStatus.Completed
                 && r.ExtractionStatus == ExtractionStatus.Completed

@@ -103,22 +103,21 @@ public class TrackedReleaseTests
     }
 
     [Fact]
-    public void TrackedRelease_NewRow_DefaultsToPendingConversionWithoutHoldingPath()
+    public void TrackedRelease_NewRow_DefaultsToPendingConversionWithoutRemoteItem()
     {
         var release = new TrackedRelease();
 
         Assert.Equal(ConversionStatus.Pending, release.ConversionStatus);
-        Assert.False(release.UsesHoldingPath);
+        Assert.Null(release.RemoteItemPath);
     }
 
     [Fact]
-    public void PathHelpers_HoldingRelease_UsesHoldingPathUntilPublished()
+    public void PathHelpers_UseHoldingPathUntilPublished()
     {
         var release = new TrackedRelease
         {
             RemotePath = "/downloads/tv/Show.S01E01",
-            StagingPath = "/staging/tv",
-            UsesHoldingPath = true
+            StagingPath = "/staging/tv"
         };
 
         Assert.Equal("/staging/tv/Show.S01E01", release.GetFinalItemPath());
@@ -129,11 +128,41 @@ public class TrackedReleaseTests
         Assert.Equal("/staging/tv/Show.S01E01", release.GetWorkingItemPath());
     }
 
-    [Fact]
-    public void PathHelpers_LegacyRelease_AlwaysUsesFinalPath()
+    [Theory]
+    // Multi-file torrent: content_path is the root folder
+    [InlineData("/downloads/radarr", "/downloads/radarr/Show.S01", "Show.S01", "/downloads/radarr/Show.S01")]
+    // Single file inside a root folder (Dune): content_path is the file, the item is the folder
+    [InlineData("/downloads/radarr", "/downloads/radarr/Dune-FraMeSToR/Dune-FraMeSToR.mkv", "Dune-FraMeSToR", "/downloads/radarr/Dune-FraMeSToR")]
+    // Plain single file (Kubo): the item is the file
+    [InlineData("/downloads/radarr", "/downloads/radarr/Kubo-FGT.mkv", "Kubo-FGT.mkv", "/downloads/radarr/Kubo-FGT.mkv")]
+    // Trailing slashes from qBittorrent
+    [InlineData("/downloads/radarr/", "/downloads/radarr/Show.S01/", "Show.S01", "/downloads/radarr/Show.S01")]
+    // No content path: save path + name
+    [InlineData("/downloads/radarr", null, "Show.S01", "/downloads/radarr/Show.S01")]
+    [InlineData("/downloads/radarr", "", "Show.S01", "/downloads/radarr/Show.S01")]
+    // Content path outside the save path: save path + name
+    [InlineData("/downloads/radarr", "/elsewhere/Show.S01", "Show.S01", "/downloads/radarr/Show.S01")]
+    // Content path equal to the save path (no root folder): save path + name
+    [InlineData("/downloads/radarr", "/downloads/radarr", "Show.S01", "/downloads/radarr/Show.S01")]
+    // Only the content path known
+    [InlineData(null, "/downloads/radarr/Show.S01", null, "/downloads/radarr/Show.S01")]
+    [InlineData(null, null, null, null)]
+    public void ComputeRemoteItemPath_FindsTopLevelItem(string? savePath, string? contentPath, string? name, string? expected)
     {
-        var release = new TrackedRelease { RemotePath = "/downloads/Movie.mkv", StagingPath = "/staging" };
+        Assert.Equal(expected, TrackedRelease.ComputeRemoteItemPath(savePath, contentPath, name));
+    }
 
-        Assert.Equal("/staging/Movie.mkv", release.GetWorkingItemPath());
+    [Theory]
+    [InlineData("/downloads/radarr/Dune-FraMeSToR/Dune-FraMeSToR.mkv", "/downloads/radarr/Dune-FraMeSToR", "Dune-FraMeSToR")]
+    [InlineData("/downloads/radarr/Kubo-FGT.mkv", "/downloads/radarr/Kubo-FGT.mkv", "Kubo-FGT.mkv")]
+    [InlineData("/downloads/radarr/Show.S01", "/downloads/radarr/Show.S01", "Show.S01")]
+    [InlineData("/downloads/radarr/Show.S01", null, "Show.S01")] // not set yet: RemotePath
+    public void GetItemName_IsNameOfRemoteItem(string remotePath, string? remoteItemPath, string expected)
+    {
+        var release = new TrackedRelease { RemotePath = remotePath, RemoteItemPath = remoteItemPath, StagingPath = "/staging" };
+
+        Assert.Equal(expected, release.GetItemName());
+        Assert.Equal($"/staging/{expected}", release.GetFinalItemPath());
+        Assert.Equal($"/staging/.harrbor/{expected}", release.GetHoldingItemPath());
     }
 }

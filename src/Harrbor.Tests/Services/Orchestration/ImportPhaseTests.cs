@@ -49,6 +49,7 @@ public class ImportPhaseTests
             .WithExtractionStatus(ExtractionStatus.Completed)
             .WithImportStatus(ImportStatus.Pending)
             .WithTransferCompletedAtUtc(DateTime.UtcNow.AddMinutes(-5))
+            .WithPublishedAtUtc(DateTime.UtcNow.AddMinutes(-5))
             .Build();
         dbContext.TrackedReleases.Add(release);
         await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -86,6 +87,7 @@ public class ImportPhaseTests
             .WithExtractionStatus(ExtractionStatus.Completed)
             .WithImportStatus(ImportStatus.Pending)
             .WithTransferCompletedAtUtc(DateTime.UtcNow.AddMinutes(-5))
+            .WithPublishedAtUtc(DateTime.UtcNow.AddMinutes(-5))
             .Build();
         dbContext.TrackedReleases.Add(release);
         await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -122,6 +124,7 @@ public class ImportPhaseTests
             .WithExtractionStatus(ExtractionStatus.Completed)
             .WithImportStatus(ImportStatus.Pending)
             .WithTransferCompletedAtUtc(DateTime.UtcNow.AddMinutes(-5))
+            .WithPublishedAtUtc(DateTime.UtcNow.AddMinutes(-5))
             .Build();
         dbContext.TrackedReleases.Add(release);
         await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -159,6 +162,7 @@ public class ImportPhaseTests
             .WithExtractionStatus(ExtractionStatus.Completed)
             .WithImportStatus(ImportStatus.Pending)
             .WithTransferCompletedAtUtc(DateTime.UtcNow.AddHours(-25)) // Completed 25 hours ago
+            .WithPublishedAtUtc(DateTime.UtcNow.AddHours(-25))
             .Build();
         dbContext.TrackedReleases.Add(release);
         await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -194,6 +198,7 @@ public class ImportPhaseTests
             .WithExtractionStatus(ExtractionStatus.Completed)
             .WithImportStatus(ImportStatus.Pending)
             .WithTransferCompletedAtUtc(DateTime.UtcNow)
+            .WithPublishedAtUtc(DateTime.UtcNow)
             .Build();
         var completedRelease = new TrackedReleaseBuilder()
             .WithDownloadId("COMPLETED456")
@@ -262,6 +267,7 @@ public class ImportPhaseTests
             .WithExtractionStatus(extractionStatus)
             .WithImportStatus(ImportStatus.Pending)
             .WithTransferCompletedAtUtc(DateTime.UtcNow)
+            .WithPublishedAtUtc(DateTime.UtcNow)
             .Build();
         dbContext.TrackedReleases.Add(release);
         await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -278,42 +284,6 @@ public class ImportPhaseTests
     }
 
     [Fact]
-    public async Task ProcessImports_TimeoutMeasuredFromExtractionCompletion()
-    {
-        // Arrange - transfer finished long ago but extraction completed recently
-        using var dbContext = TestDbContextFactory.Create();
-        var release = new TrackedReleaseBuilder()
-            .WithDownloadId("ABC123")
-            .WithJobName("test-job")
-            .WithTransferStatus(TransferStatus.Completed)
-            .WithExtractionStatus(ExtractionStatus.Completed)
-            .WithImportStatus(ImportStatus.Pending)
-            .WithTransferCompletedAtUtc(DateTime.UtcNow.AddHours(-25))
-            .WithExtractionCompletedAtUtc(DateTime.UtcNow.AddHours(-1))
-            .Build();
-        dbContext.TrackedReleases.Add(release);
-        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
-
-        A.CallTo(() => _mediaService.IsDownloadInQueueAsync("ABC123", A<CancellationToken>._))
-            .Returns(true); // Still in queue
-
-        var job = new JobDefinitionBuilder()
-            .WithName("test-job")
-            .WithImportTimeout(TimeSpan.FromHours(24))
-            .Build();
-
-        var handler = CreateHandler();
-
-        // Act
-        await handler.ExecuteAsync(job, dbContext, _mediaService, CancellationToken.None);
-
-        // Assert - import window starts at extraction completion, so no timeout yet
-        var updatedRelease = await dbContext.TrackedReleases.FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
-        updatedRelease.ImportStatus.Should().Be(ImportStatus.Pending);
-        updatedRelease.LastError.Should().BeNull();
-    }
-
-    [Fact]
     public async Task ProcessImports_WithinTimeout_RemainsInPending()
     {
         // Arrange
@@ -325,6 +295,7 @@ public class ImportPhaseTests
             .WithExtractionStatus(ExtractionStatus.Completed)
             .WithImportStatus(ImportStatus.Pending)
             .WithTransferCompletedAtUtc(DateTime.UtcNow.AddHours(-1)) // Completed 1 hour ago
+            .WithPublishedAtUtc(DateTime.UtcNow.AddHours(-1))
             .Build();
         dbContext.TrackedReleases.Add(release);
         await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -358,7 +329,6 @@ public class ImportPhaseTests
             .WithTransferStatus(TransferStatus.Completed)
             .WithExtractionStatus(ExtractionStatus.Completed)
             .WithConversionStatus(ConversionStatus.Completed)
-            .WithUsesHoldingPath(true)
             .WithPublishedAtUtc(null)
             .Build());
         await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -371,10 +341,8 @@ public class ImportPhaseTests
             .ImportStatus.Should().Be(ImportStatus.Pending);
     }
 
-    [Theory]
-    [InlineData(true)]   // published holding release
-    [InlineData(false)]  // legacy release (no holding path)
-    public async Task ProcessImports_PublishedOrLegacyRelease_IsChecked(bool usesHoldingPath)
+    [Fact]
+    public async Task ProcessImports_PublishedRelease_IsChecked()
     {
         using var dbContext = TestDbContextFactory.Create();
         dbContext.TrackedReleases.Add(new TrackedReleaseBuilder()
@@ -382,9 +350,8 @@ public class ImportPhaseTests
             .WithJobName("test-job")
             .WithTransferStatus(TransferStatus.Completed)
             .WithExtractionStatus(ExtractionStatus.Completed)
-            .WithConversionStatus(usesHoldingPath ? ConversionStatus.Completed : ConversionStatus.Skipped)
-            .WithUsesHoldingPath(usesHoldingPath)
-            .WithPublishedAtUtc(usesHoldingPath ? DateTime.UtcNow : null)
+            .WithConversionStatus(ConversionStatus.Completed)
+            .WithPublishedAtUtc(DateTime.UtcNow)
             .Build());
         await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
         A.CallTo(() => _mediaService.IsDownloadInQueueAsync("REL1", A<CancellationToken>._)).Returns(false);
@@ -409,7 +376,6 @@ public class ImportPhaseTests
             .WithExtractionStatus(ExtractionStatus.Completed)
             .WithExtractionCompletedAtUtc(DateTime.UtcNow.AddHours(-30))
             .WithConversionStatus(ConversionStatus.Completed)
-            .WithUsesHoldingPath(true)
             .WithPublishedAtUtc(DateTime.UtcNow.AddHours(-1))
             .Build());
         await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);

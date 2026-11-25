@@ -51,14 +51,13 @@ public class ConversionPhaseHandler : IConversionPhaseHandler
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (job.Converters.Count == 0 || !release.UsesHoldingPath)
+            if (job.Converters.Count == 0)
             {
-                // Legacy rows are already visible to Sonarr/Radarr, so they must not be rewritten in place.
                 release.ConversionStatus = ConversionStatus.Skipped;
                 release.ConversionCompletedAtUtc = DateTime.UtcNow;
                 _logger.LogDebug(
-                    "Job '{JobName}': Conversion skipped for '{ReleaseName}' ({Reason})",
-                    job.Name, release.Name, job.Converters.Count == 0 ? "no converters configured" : "legacy release");
+                    "Job '{JobName}': Conversion skipped for '{ReleaseName}' (no converters configured)",
+                    job.Name, release.Name);
                 continue;
             }
 

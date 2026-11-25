@@ -43,8 +43,9 @@ public interface IMediaConverter
 
     /// <summary>
     /// Writes the converted output to <paramref name="outputPath"/>. Must never modify <paramref name="inputPath"/>.
-    /// <paramref name="scratchDir"/> is an empty directory on the same filesystem for intermediates;
-    /// the caller deletes it afterwards. Throw on failure.
+    /// <paramref name="scratchDir"/> is an empty directory for intermediates; the caller deletes it afterwards.
+    /// It is not necessarily on the same filesystem as the input or output (see <c>Conversion:ScratchPath</c>),
+    /// so don't rename files from it into place. Throw on failure.
     /// </summary>
     Task ConvertAsync(string inputPath, string outputPath, MediaProbe probe, string scratchDir, CancellationToken cancellationToken);
 

@@ -37,7 +37,6 @@ public class PublishPhaseTests : IDisposable
             .WithTransferStatus(TransferStatus.Completed)
             .WithExtractionStatus(ExtractionStatus.Completed)
             .WithConversionStatus(conversion)
-            .WithUsesHoldingPath(true)
             .Build();
 
     [Fact]
@@ -77,6 +76,25 @@ public class PublishPhaseTests : IDisposable
         (await db.TrackedReleases.SingleAsync(TestContext.Current.CancellationToken)).PublishedAtUtc.Should().NotBeNull();
         File.ReadAllText(Path.Combine(_staging, "Movie.2024.mkv")).Should().Be("video");
         File.Exists(release.GetHoldingItemPath()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task SingleFileInRootFolder_PublishesTheRootFolder()
+    {
+        // Dune: RemotePath is the file, the transfer item is its root folder
+        using var db = TestDbContextFactory.Create();
+        var release = Release("Dune");
+        release.RemotePath = "/downloads/Dune/Dune.mkv";
+        release.RemoteItemPath = "/downloads/Dune";
+        Directory.CreateDirectory(release.GetHoldingItemPath());
+        File.WriteAllText(Path.Combine(release.GetHoldingItemPath(), "Dune.mkv"), "video");
+        db.TrackedReleases.Add(release);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        await CreateHandler().ExecuteAsync(_job, db, TestContext.Current.CancellationToken);
+
+        (await db.TrackedReleases.SingleAsync(TestContext.Current.CancellationToken)).PublishedAtUtc.Should().NotBeNull();
+        File.ReadAllText(Path.Combine(_staging, "Dune", "Dune.mkv")).Should().Be("video");
     }
 
     [Fact]
@@ -131,7 +149,7 @@ public class PublishPhaseTests : IDisposable
         updated.LastError.Should().Contain("Holding item not found");
     }
 
-    public static TheoryData<string> NotReadyCases => ["conversion-pending", "conversion-inprogress", "extraction-pending", "legacy", "already-published", "other-job"];
+    public static TheoryData<string> NotReadyCases => ["conversion-pending", "conversion-inprogress", "extraction-pending", "already-published", "other-job"];
 
     [Theory]
     [MemberData(nameof(NotReadyCases))]
@@ -144,7 +162,6 @@ public class PublishPhaseTests : IDisposable
             case "conversion-pending": release.ConversionStatus = ConversionStatus.Pending; break;
             case "conversion-inprogress": release.ConversionStatus = ConversionStatus.InProgress; break;
             case "extraction-pending": release.ExtractionStatus = ExtractionStatus.Pending; break;
-            case "legacy": release.UsesHoldingPath = false; break;
             case "already-published": release.PublishedAtUtc = DateTime.UtcNow.AddHours(-1); break;
             case "other-job": release.JobName = "other"; break;
         }

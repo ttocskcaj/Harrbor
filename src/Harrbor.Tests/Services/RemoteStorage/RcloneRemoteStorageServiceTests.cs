@@ -199,32 +199,34 @@ public class RcloneRemoteStorageServiceTests
     }
 
     [Theory]
-    [InlineData("Kubo.mkv\n", true)]
-    [InlineData("file1.rar\nfile1.r00\n", true)]
-    [InlineData("", false)]
-    public void InterpretLsfExistsResult_ExitZero_ExistsWhenOutputNonEmpty(string output, bool expected)
+    [InlineData("Kubo.mkv", "Kubo.mkv\nOther/\n", RemoteItemKind.File)]
+    [InlineData("Dune", "Dune.mkv\nDune/\n", RemoteItemKind.Directory)]
+    [InlineData("Dune", "Dune.mkv\r\nDune/\r\n", RemoteItemKind.Directory)]
+    [InlineData("Dune.mkv", "Dune/\n", RemoteItemKind.Missing)]
+    [InlineData("Dune", "", RemoteItemKind.Missing)]
+    public void InterpretLsfItemKind_ExitZero_FindsEntryInParentListing(string name, string output, RemoteItemKind expected)
     {
-        RcloneRemoteStorageService.InterpretLsfExistsResult(0, output, "").Should().Be(expected);
+        RcloneRemoteStorageService.InterpretLsfItemKind(name, 0, output, "").Should().Be(expected);
     }
 
     [Theory]
     [InlineData(3)] // directory not found
     [InlineData(4)] // file not found
-    public void InterpretLsfExistsResult_NotFoundExitCodes_ReturnsFalse(int exitCode)
+    public void InterpretLsfItemKind_NotFoundExitCodes_ReturnsMissing(int exitCode)
     {
-        RcloneRemoteStorageService.InterpretLsfExistsResult(
-                exitCode, "", "NOTICE: Failed to lsf with 2 errors: last error was: error in ListJSON: directory not found")
-            .Should().BeFalse();
+        RcloneRemoteStorageService.InterpretLsfItemKind(
+                "Kubo.mkv", exitCode, "", "NOTICE: Failed to lsf with 2 errors: last error was: error in ListJSON: directory not found")
+            .Should().Be(RemoteItemKind.Missing);
     }
 
     [Theory]
     [InlineData(1)] // e.g. couldn't connect SSH: connection refused
     [InlineData(5)] // temporary error
     [InlineData(7)] // fatal error (auth etc.)
-    public void InterpretLsfExistsResult_OtherFailures_ThrowsUnavailable(int exitCode)
+    public void InterpretLsfItemKind_OtherFailures_ThrowsUnavailable(int exitCode)
     {
-        var act = () => RcloneRemoteStorageService.InterpretLsfExistsResult(
-            exitCode, "",
+        var act = () => RcloneRemoteStorageService.InterpretLsfItemKind(
+            "Kubo.mkv", exitCode, "",
             "CRITICAL: Failed to create file system for \":sftp,host=h,user=u,pass=secret:/x\": NewFs: couldn't connect SSH: dial tcp 1.2.3.4:22: connect: connection refused\n");
 
         act.Should().Throw<RemoteStorageUnavailableException>()

@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using Harrbor.Configuration;
 using Harrbor.Data;
 using Harrbor.Data.Entities;
+using Harrbor.Services.Clients;
+using Harrbor.Services.Clients.Models;
 using Harrbor.Services.RemoteStorage;
 
 namespace Harrbor.Services.Orchestration.Phases;
@@ -13,22 +15,36 @@ public interface ITransferPhaseHandler : IPhaseHandler
 public class TransferPhaseHandler : ITransferPhaseHandler
 {
     private readonly IRemoteStorageService _remoteStorageService;
+    private readonly IMediaServiceResolver _mediaServiceResolver;
     private readonly ILogger<TransferPhaseHandler> _logger;
 
     public TransferPhaseHandler(
         IRemoteStorageService remoteStorageService,
+        IMediaServiceResolver mediaServiceResolver,
         ILogger<TransferPhaseHandler> logger)
     {
         _remoteStorageService = remoteStorageService;
+        _mediaServiceResolver = mediaServiceResolver;
         _logger = logger;
     }
 
     public Task ExecuteAsync(JobDefinition job, HarrborDbContext dbContext, CancellationToken cancellationToken)
     {
-        return ExecuteAsync(job, dbContext, _remoteStorageService, cancellationToken);
+        return ExecuteAsync(job, dbContext, _remoteStorageService, _mediaServiceResolver.GetServiceForJob(job), cancellationToken);
     }
 
-    public async Task ExecuteAsync(JobDefinition job, HarrborDbContext dbContext, IRemoteStorageService remoteStorageService, CancellationToken cancellationToken)
+    public Task ExecuteAsync(JobDefinition job, HarrborDbContext dbContext, IRemoteStorageService remoteStorageService, CancellationToken cancellationToken)
+    {
+        return ExecuteAsync(job, dbContext, remoteStorageService, mediaService: null, cancellationToken);
+    }
+
+    /// <param name="mediaService">Used to check the staged layout against the *arr's queue; null skips the check.</param>
+    public async Task ExecuteAsync(
+        JobDefinition job,
+        HarrborDbContext dbContext,
+        IRemoteStorageService remoteStorageService,
+        IMediaService? mediaService,
+        CancellationToken cancellationToken)
     {
         // Check currently in-progress transfers to respect parallelism limit
         var inProgressCount = await dbContext.TrackedReleases
@@ -90,6 +106,13 @@ public class TransferPhaseHandler : ITransferPhaseHandler
             .ToList();
 
         await Task.WhenAll(transferTasks);
+
+        if (mediaService != null)
+        {
+            var completed = pendingTransfers.Where(r => r.TransferStatus == TransferStatus.Completed).ToList();
+            if (completed.Count > 0)
+                await CheckStagedLayoutAsync(job, completed, mediaService, cancellationToken);
+        }
     }
 
     private async Task TransferReleaseAsync(
@@ -101,44 +124,58 @@ public class TransferPhaseHandler : ITransferPhaseHandler
     {
         var isRetry = release.TransferStatus == TransferStatus.Failed;
         var attemptNumber = release.ErrorCount + 1;
+        var remoteItemPath = release.GetRemoteItemPath();
 
-        // For retries, check if the remote file still exists
-        if (isRetry)
+        // Find out whether the torrent's top-level item is a file or a directory (that decides the rclone verb),
+        // and whether it still exists.
+        RemoteItemKind itemKind;
+        try
         {
-            bool remoteExists;
-            try
-            {
-                remoteExists = await remoteStorageService.ExistsAsync(release.RemotePath, cancellationToken);
-            }
-            catch (RemoteStorageUnavailableException ex)
-            {
-                // Couldn't reach the remote, so we don't know whether the source is gone.
-                // Don't burn a retry attempt or fail permanently - back off and check again
-                // after the retry delay.
-                release.LastError = ex.Message;
-                release.LastErrorAtUtc = DateTime.UtcNow;
-                await dbContext.SaveChangesAsync(cancellationToken);
+            itemKind = await remoteStorageService.GetItemKindAsync(remoteItemPath, cancellationToken);
+        }
+        catch (RemoteStorageUnavailableException ex)
+        {
+            // Couldn't reach the remote, so we don't know whether the source is there.
+            // Don't burn a retry attempt or fail permanently - check again on a later cycle.
+            release.LastError = ex.Message;
+            release.LastErrorAtUtc = DateTime.UtcNow;
+            await dbContext.SaveChangesAsync(cancellationToken);
 
-                _logger.LogWarning(
-                    "Job '{JobName}': Could not verify remote source for '{ReleaseName}' at {RemotePath}, will retry after {RetryDelay}: {Error}",
-                    job.Name, release.Name, release.RemotePath, job.TransferRetryDelay, ex.Message);
-                return;
-            }
+            _logger.LogWarning(
+                "Job '{JobName}': Could not check remote source for '{ReleaseName}' at {RemotePath}, will retry: {Error}",
+                job.Name, release.Name, remoteItemPath, ex.Message);
+            return;
+        }
 
-            if (!remoteExists)
+        if (itemKind == RemoteItemKind.Missing)
+        {
+            release.TransferStatus = TransferStatus.Failed;
+            release.LastErrorAtUtc = DateTime.UtcNow;
+
+            if (isRetry)
             {
-                // Source file is gone - mark as permanently failed
+                // Source is gone after a failed attempt - mark as permanently failed
                 release.ErrorCount = job.MaxTransferRetries;
                 release.LastError = "Remote source no longer exists";
-                release.LastErrorAtUtc = DateTime.UtcNow;
-                await dbContext.SaveChangesAsync(cancellationToken);
-
                 _logger.LogWarning(
                     "Job '{JobName}': Remote source no longer exists for '{ReleaseName}' at {RemotePath}, marking as permanently failed",
-                    job.Name, release.Name, release.RemotePath);
-                return;
+                    job.Name, release.Name, remoteItemPath);
+            }
+            else
+            {
+                release.ErrorCount++;
+                release.LastError = $"Remote source not found: {remoteItemPath}";
+                _logger.LogWarning(
+                    "Job '{JobName}': Remote source not found for '{ReleaseName}' at {RemotePath}, will retry",
+                    job.Name, release.Name, remoteItemPath);
             }
 
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        if (isRetry)
+        {
             _logger.LogInformation(
                 "Job '{JobName}': Retrying transfer for '{ReleaseName}' (attempt {Attempt}/{MaxAttempts})",
                 job.Name, release.Name, attemptNumber, job.MaxTransferRetries);
@@ -148,21 +185,21 @@ public class TransferPhaseHandler : ITransferPhaseHandler
         release.TransferStartedAtUtc = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        // Destination is named after the torrent. New releases go to the hidden holding directory and are
-        // published to the final staging path (which Sonarr/Radarr watches) only once post-processing is done.
-        var destinationPath = release.UsesHoldingPath ? release.GetHoldingItemPath() : release.GetFinalItemPath();
+        // Releases go to the hidden holding directory, named after the torrent's top-level item, and are published
+        // to the final staging path (which Sonarr/Radarr watches) only once post-processing is done.
+        var destinationPath = release.GetHoldingItemPath();
+        var isFile = itemKind == RemoteItemKind.File;
 
         _logger.LogInformation(
-            "Job '{JobName}': Starting transfer for '{ReleaseName}' from {RemotePath} to {DestinationPath}{AttemptInfo}",
-            job.Name, release.Name, release.RemotePath, destinationPath,
+            "Job '{JobName}': Starting transfer for '{ReleaseName}' from {RemotePath} to {DestinationPath} ({ItemKind}){AttemptInfo}",
+            job.Name, release.Name, remoteItemPath, destinationPath, isFile ? "file" : "directory",
             isRetry ? $" (attempt {attemptNumber}/{job.MaxTransferRetries})" : "");
 
         try
         {
-            var result = await remoteStorageService.TransferAsync(
-                release.RemotePath,
-                destinationPath,
-                cancellationToken);
+            var result = isFile
+                ? await remoteStorageService.TransferFileAsync(remoteItemPath, destinationPath, cancellationToken)
+                : await remoteStorageService.TransferAsync(remoteItemPath, destinationPath, cancellationToken);
 
             if (result.Success)
             {
@@ -208,6 +245,64 @@ public class TransferPhaseHandler : ITransferPhaseHandler
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Compares where each release will be published with where the *arr expects it (the queue record's
+    /// <c>outputPath</c>), and warns on a mismatch so a wrong layout shows up now instead of as a stalled import.
+    /// </summary>
+    private async Task CheckStagedLayoutAsync(
+        JobDefinition job,
+        IReadOnlyList<TrackedRelease> releases,
+        IMediaService mediaService,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<QueueItem> queue;
+        try
+        {
+            queue = await mediaService.GetQueueAsync(cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "Job '{JobName}': Could not fetch the queue to check the staged layout", job.Name);
+            return;
+        }
+
+        foreach (var release in releases)
+        {
+            var outputPath = queue.FirstOrDefault(q =>
+                string.Equals(q.DownloadId, release.DownloadId, StringComparison.OrdinalIgnoreCase))?.OutputPath;
+            if (string.IsNullOrEmpty(outputPath))
+            {
+                _logger.LogDebug(
+                    "Job '{JobName}': No queue output path for '{ReleaseName}', staged layout not checked",
+                    job.Name, release.Name);
+                continue;
+            }
+
+            var finalItemPath = release.GetFinalItemPath();
+            var check = StagedLayoutCheck.Evaluate(outputPath, job.StagingPath, finalItemPath, job.RemotePath, release.RemotePath);
+            switch (check.Matches)
+            {
+                case true:
+                    _logger.LogDebug(
+                        "Job '{JobName}': Staged layout for '{ReleaseName}' matches the *arr's output path {OutputPath}",
+                        job.Name, release.Name, outputPath);
+                    break;
+                case false:
+                    _logger.LogWarning(
+                        "Job '{JobName}': Staged layout for '{ReleaseName}' does not match what {ServiceType} expects: " +
+                        "it will be published to {FinalItemPath} (seen by {ServiceType} as {ExpectedPath}), but its output path is {OutputPath}. " +
+                        "The import will probably fail; check the remote path mapping",
+                        job.Name, release.Name, job.ServiceType, finalItemPath, job.ServiceType, check.ExpectedPath, outputPath);
+                    break;
+                default:
+                    _logger.LogDebug(
+                        "Job '{JobName}': Can't map {ServiceType} output path {OutputPath} for '{ReleaseName}' to staging, layout not checked",
+                        job.Name, job.ServiceType, outputPath, release.Name);
+                    break;
+            }
+        }
     }
 
     private static string FormatSize(long bytes)

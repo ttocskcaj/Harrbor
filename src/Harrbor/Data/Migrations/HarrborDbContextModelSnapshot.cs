@@ -103,6 +103,10 @@ namespace Harrbor.Data.Migrations
                     b.Property<DateTime?>("PublishedAtUtc")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("RemoteItemPath")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("RemotePath")
                         .IsRequired()
                         .HasMaxLength(1000)
@@ -120,9 +124,6 @@ namespace Harrbor.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<int>("TransferStatus")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("UsesHoldingPath")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");

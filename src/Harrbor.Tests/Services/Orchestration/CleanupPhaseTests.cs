@@ -246,7 +246,6 @@ public class CleanupPhaseTests : IDisposable
             .WithCleanupStatus(CleanupStatus.Pending)
             .WithRemotePath("/downloads/Show.S01")
             .WithStagingPath(_tempDir)
-            .WithUsesHoldingPath(true)
             .Build());
         await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
@@ -258,5 +257,33 @@ public class CleanupPhaseTests : IDisposable
         Directory.Exists(finalDir).Should().BeFalse();
         Directory.Exists(holdingDir).Should().BeFalse();
         Directory.Exists(Path.Combine(_tempDir, ".harrbor")).Should().BeTrue("the holding root itself is kept");
+    }
+
+    [Fact]
+    public async Task ProcessCleanup_FileItem_DeletesFinalAndLeftoverHoldingFile()
+    {
+        var finalFile = Path.Combine(_tempDir, "Kubo.mkv");
+        var holdingFile = Path.Combine(_tempDir, ".harrbor", "Kubo.mkv");
+        Directory.CreateDirectory(Path.GetDirectoryName(holdingFile)!);
+        File.WriteAllText(finalFile, "x");
+        File.WriteAllText(holdingFile, "x");
+
+        using var dbContext = TestDbContextFactory.Create();
+        dbContext.TrackedReleases.Add(new TrackedReleaseBuilder()
+            .WithJobName("test-job")
+            .WithImportStatus(ImportStatus.Completed)
+            .WithCleanupStatus(CleanupStatus.Pending)
+            .WithRemotePath("/downloads/Kubo.mkv")
+            .WithRemoteItemPath("/downloads/Kubo.mkv")
+            .WithStagingPath(_tempDir)
+            .Build());
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        await CreateHandler().ExecuteAsync(new JobDefinitionBuilder().WithName("test-job").Build(), dbContext, TestContext.Current.CancellationToken);
+
+        (await dbContext.TrackedReleases.SingleAsync(TestContext.Current.CancellationToken))
+            .CleanupStatus.Should().Be(CleanupStatus.Completed);
+        File.Exists(finalFile).Should().BeFalse();
+        File.Exists(holdingFile).Should().BeFalse();
     }
 }

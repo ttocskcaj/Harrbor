@@ -62,9 +62,9 @@ public class ExtractionPhaseTests
         // Act
         await handler.ExecuteAsync(job, dbContext, _extractionService, CancellationToken.None);
 
-        // Assert - service called with the staging item path derived from RemotePath
+        // Assert - service called with the holding item path derived from RemotePath
         A.CallTo(() => _extractionService.ExtractAsync(
-                Path.Combine("/staging/test", "Test.Release.S01E01"), A<CancellationToken>._))
+                Path.Combine("/staging/test", ".harrbor", "Test.Release.S01E01"), A<CancellationToken>._))
             .MustHaveHappenedOnceExactly();
 
         var updated = dbContext.TrackedReleases.Single();
@@ -256,8 +256,8 @@ public class ExtractionPhaseTests
 
         // Assert
         extractedPaths.Should().ContainInOrder(
-            Path.Combine("/staging/test", "older"),
-            Path.Combine("/staging/test", "newer"));
+            Path.Combine("/staging/test", ".harrbor", "older"),
+            Path.Combine("/staging/test", ".harrbor", "newer"));
         dbContext.TrackedReleases.ToList().Should().AllSatisfy(
             r => r.ExtractionStatus.Should().Be(ExtractionStatus.Completed));
     }

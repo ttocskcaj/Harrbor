@@ -35,10 +35,8 @@ public class CleanupPhaseHandler : ICleanupPhaseHandler
         {
             try
             {
-                // Remove a leftover holding copy too (e.g. a release imported before it was published)
-                var holdingItemPath = release.GetHoldingItemPath();
-                if (release.UsesHoldingPath)
-                    DeleteItem(job, release, holdingItemPath);
+                // Remove a leftover holding copy too, defensively (e.g. a release imported before it was published)
+                DeleteItem(job, release, release.GetHoldingItemPath());
 
                 var stagingItemPath = release.GetFinalItemPath();
 

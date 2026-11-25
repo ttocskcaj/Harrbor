@@ -15,6 +15,7 @@ public class StartupValidator
     private readonly IOptions<SonarrOptions> _sonarrOptions;
     private readonly IOptions<RadarrOptions> _radarrOptions;
     private readonly IOptions<JobOptions> _jobOptions;
+    private readonly IOptions<ConversionOptions> _conversionOptions;
     private readonly ConverterRegistry _converterRegistry;
     private readonly ToolChecker _toolChecker;
     private readonly ILogger<StartupValidator> _logger;
@@ -27,6 +28,7 @@ public class StartupValidator
         IOptions<SonarrOptions> sonarrOptions,
         IOptions<RadarrOptions> radarrOptions,
         IOptions<JobOptions> jobOptions,
+        IOptions<ConversionOptions> conversionOptions,
         ConverterRegistry converterRegistry,
         ToolChecker toolChecker,
         ILogger<StartupValidator> logger)
@@ -38,6 +40,7 @@ public class StartupValidator
         _sonarrOptions = sonarrOptions;
         _radarrOptions = radarrOptions;
         _jobOptions = jobOptions;
+        _conversionOptions = conversionOptions;
         _converterRegistry = converterRegistry;
         _toolChecker = toolChecker;
         _logger = logger;
@@ -149,6 +152,25 @@ public class StartupValidator
                     errors.Add($"Job '{job.Name}': Staging path is not writable: {ex.Message}");
                     _logger.LogError(ex, "Job '{JobName}': Staging path is not writable: {Path}", job.Name, job.StagingPath);
                 }
+            }
+        }
+
+        // Verify the conversion scratch path, if set, exists (or can be created) and is writable
+        var scratchPath = _conversionOptions.Value.ScratchPath;
+        if (!string.IsNullOrWhiteSpace(scratchPath))
+        {
+            try
+            {
+                Directory.CreateDirectory(scratchPath);
+                var testFile = Path.Combine(scratchPath, ".harrbor-write-test");
+                await File.WriteAllTextAsync(testFile, "test", cancellationToken);
+                File.Delete(testFile);
+                _logger.LogDebug("Conversion scratch path is writable: {Path}", scratchPath);
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"Conversion:ScratchPath is not writable: {ex.Message}");
+                _logger.LogError(ex, "Conversion scratch path is not writable: {Path}", scratchPath);
             }
         }
 

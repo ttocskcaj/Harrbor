@@ -31,7 +31,7 @@ public class TrackedReleaseBuilder
     private DateTime? _cleanupCompletedAtUtc;
     private DateTime? _archivedAtUtc;
     private ConversionStatus _conversionStatus = ConversionStatus.Pending;
-    private bool _usesHoldingPath;
+    private string? _remoteItemPath;
     private DateTime? _publishedAtUtc;
 
     public TrackedReleaseBuilder WithConversionStatus(ConversionStatus status)
@@ -40,9 +40,9 @@ public class TrackedReleaseBuilder
         return this;
     }
 
-    public TrackedReleaseBuilder WithUsesHoldingPath(bool usesHoldingPath)
+    public TrackedReleaseBuilder WithRemoteItemPath(string? remoteItemPath)
     {
-        _usesHoldingPath = usesHoldingPath;
+        _remoteItemPath = remoteItemPath;
         return this;
     }
 
@@ -205,6 +205,7 @@ public class TrackedReleaseBuilder
             Name = _name,
             JobName = _jobName,
             RemotePath = _remotePath,
+            RemoteItemPath = _remoteItemPath,
             StagingPath = _stagingPath,
             DownloadStatus = _downloadStatus,
             TransferStatus = _transferStatus,
@@ -225,7 +226,6 @@ public class TrackedReleaseBuilder
             CleanupCompletedAtUtc = _cleanupCompletedAtUtc,
             ArchivedAtUtc = _archivedAtUtc,
             ConversionStatus = _conversionStatus,
-            UsesHoldingPath = _usesHoldingPath,
             PublishedAtUtc = _publishedAtUtc
         };
     }

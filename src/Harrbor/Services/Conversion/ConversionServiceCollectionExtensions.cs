@@ -16,6 +16,7 @@ public static class ConversionServiceCollectionExtensions
 
         services.AddSingleton<IProcessRunner, ProcessRunner>();
         services.AddSingleton<IMediaProbeService, MediaProbeService>();
+        services.AddSingleton<IDiskSpaceProvider, DiskSpaceProvider>();
         services.AddSingleton<IConversionService, ConversionService>();
         services.AddSingleton<ConverterRegistry>();
         services.AddSingleton<ToolChecker>();

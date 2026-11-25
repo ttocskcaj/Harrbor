@@ -78,7 +78,7 @@ public class ExtractionPhaseHandler : IExtractionPhaseHandler
         release.ExtractionStartedAtUtc = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        // Holding path for new releases (not yet visible to Sonarr/Radarr), final staging path for legacy ones
+        // The holding path: not yet visible to Sonarr/Radarr
         var stagingItemPath = release.GetWorkingItemPath();
 
         try
